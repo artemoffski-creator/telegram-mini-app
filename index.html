@@ -248,33 +248,50 @@
     }
 
     function exportToExcel() {
-      const selectedVessel = document.getElementById('vesselSelect').value;
-      const filtered = rawItems.filter(item => !selectedVessel || item.vessel === selectedVessel);
+  const selectedVessel = document.getElementById('vesselSelect').value;
+  const filtered = rawItems.filter(item => !selectedVessel || item.vessel === selectedVessel);
 
-      if (filtered.length === 0) {
-        alert("Нет данных для экспорта!");
-        return;
-      }
+  if (filtered.length === 0) {
+    alert("Нет данных для экспорта!");
+    return;
+  }
 
-      const excelData = filtered.map(i => ({
-        "Судно": i.vessel,
-        "Документ / Маркировка": i.doc,
-        "Группа": i.group,
-        "Статус": i.status,
-        "Дата приёмки": i.date,
-        "Паллеты": i.pallets,
-        "Коробки 15кг": i.box15,
-        "Коробки 25кг": i.box25,
-        "Комментарий": i.comment,
-        "Ссылка на фото": i.photo
-      }));
+  const excelData = filtered.map(i => ({
+    "Судно": i.vessel,
+    "Документ": i.doc,
+    "Маркировка": i.group,
+    "Статус": i.status,
+    "Дата приёмки": i.date,
+    "Паллеты": i.pallets,
+    "Коробки 15кг": i.box15,
+    "Коробки 25кг": i.box25,
+    "Комментарий": i.comment,
+    "Ссылка на фото": i.photo
+  }));
 
-      const worksheet = XLSX.utils.json_to_sheet(excelData);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Приёмка");
+  const worksheet = XLSX.utils.json_to_sheet(excelData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Приёмка");
 
-      XLSX.writeFile(workbook, `Отчет_Приемка_${new Date().toISOString().slice(0,10)}.xlsx`);
+  // Генерируем имя файла
+  const fileName = `Отчет_Приемка_${new Date().toISOString().slice(0,10)}.xlsx`;
+
+  try {
+    // 1. Попытка стандартного скачивания (работает на ПК и в обычных браузерах)
+    XLSX.writeFile(workbook, fileName);
+  } catch (err) {
+    // 2. Фолбэк для мобильного Telegram WebApp, если прямая запись заблокирована
+    const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+    const dataUri = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + wbout;
+    
+    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openLink) {
+      window.Telegram.WebApp.openLink(dataUri);
+    } else {
+      window.location.href = dataUri;
     }
+  }
+}
+
 
     async function handleFormSubmit(e) {
       e.preventDefault();
