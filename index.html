@@ -127,28 +127,38 @@
     }
 
     // Загрузка отчетов
+       // Загрузка и рендеринг отчётов
     async function loadReports() {
       const container = document.getElementById('reportsContainer');
       const period = document.getElementById('periodSelect').value;
-      container.innerHTML = "Обновление данных...";
+      container.innerHTML = "<div class='card'>⏳ Загрузка отчётов...</div>";
+
       try {
         const res = await fetch(`${API_URL}?action=get_ship_list&period=${period}`);
         const data = await res.json();
-        if (!data || data.length === 0) {
-          container.innerHTML = "<div class='card'>Нет данных за выбранный период</div>";
+
+        if (!Array.isArray(data) || data.length === 0) {
+          container.innerHTML = "<div class='card'>📭 Нет данных по приёмке за выбранный период</div>";
           return;
         }
+
         container.innerHTML = data.map(item => `
           <div class="card">
-            <strong>🚢 ${item.ship || 'Судно не указано'}</strong><br>
-            <small>📅 ${item.date || ''}</small><br>
-            📦 Паллеты: ${item.pallets || 0} | 📦 15кг: ${item.box15 || 0} | 📦 25кг: ${item.box25 || 0}
+            <strong style="font-size: 15px;">📦 Документ: ${item.doc || 'Без номера'}</strong><br>
+            <small style="color: #666;">📅 Дата: ${item.date}</small>
+            <hr style="border:0; border-top: 1px solid #eee; margin: 8px 0;">
+            <div>📊 <b>Паллеты:</b> ${item.pallets} | <b>15кг:</b> ${item.box15} | <b>25кг:</b> ${item.box25}</div>
+            ${item.comment ? `<div style="margin-top: 4px; font-size: 13px; color: #444;">💬 <i>${item.comment}</i></div>` : ''}
+            ${item.photo ? `<div style="margin-top: 6px;"><a href="${item.photo}" target="_blank" style="color: #0088cc; font-size: 13px;">🖼 Смотреть фото</a></div>` : ''}
           </div>
         `).join('');
+
       } catch (e) {
-        container.innerHTML = "<div class='card'>⚠️ Ошибка загрузки отчётов</div>";
+        console.error("Ошибка при загрузке отчетов:", e);
+        container.innerHTML = "<div class='card'>⚠️ Ошибка загрузки отчётов. Проверьте консоль браузера.</div>";
       }
     }
+
 
     // Подгрузка незакрытых документов (CELST)
     async function loadGroupsDropdown() {
