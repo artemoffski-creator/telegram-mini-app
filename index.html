@@ -5,16 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TMA Cargo System</title>
   
-  <!-- Telegram WebApp SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <!-- SheetJS для клиентского экспорта в Excel -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f4f7; margin: 0; padding: 12px; color: #333; }
     
-    /* Табы (Переключение между отчетом и приемкой) */
     .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
     .tab-btn { flex: 1; padding: 10px; background: #e3e3e8; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; color: #555; }
     .tab-btn.active { background: #007aff; color: #fff; }
@@ -22,89 +19,100 @@
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
-    /* Блок фильтров и управления */
     .controls { background: #fff; padding: 12px; border-radius: 12px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
     .btn-group { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 8px; }
     .btn-group button { border: 1px solid #007aff; background: #fff; color: #007aff; padding: 6px 12px; border-radius: 8px; font-size: 13px; white-space: nowrap; cursor: pointer; }
     .btn-group button.active { background: #007aff; color: #fff; }
     
     .select-row { display: flex; gap: 8px; margin-bottom: 8px; }
-    select { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #ccc; font-size: 14px; background: #fff; }
+    select, input, textarea { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; font-size: 14px; background: #fff; margin-bottom: 8px; }
     
     .excel-btn { width: 100%; background: #34c759; color: #fff; border: none; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 14px; cursor: pointer; }
-    .excel-btn:active { background: #2ca84a; }
+    .submit-btn { width: 100%; background: #007aff; color: #fff; border: none; padding: 12px; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; }
 
-    /* Карточки отчета */
     .card { background: #fff; border-radius: 10px; padding: 12px; margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
     .card-header { display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; margin-bottom: 6px; border-bottom: 1px solid #f0f0f0; padding-bottom: 6px; }
     .badge { background: #e5f1ff; color: #007aff; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
     .card-body { font-size: 13px; color: #444; line-height: 1.5; }
-    .photo-link { display: inline-block; margin-top: 6px; color: #007aff; text-decoration: none; font-weight: 500; }
-
-    /* Индикаторы загрузки */
     .loader { text-align: center; padding: 20px; color: #777; font-size: 14px; }
+    label { font-size: 12px; font-weight: bold; color: #666; display: block; margin-bottom: 4px; }
   </style>
 </head>
 <body>
 
-  <!-- Навигация по вкладкам -->
+  <!-- Навигация -->
   <div class="tabs">
     <button class="tab-btn active" onclick="switchTab('report')">📋 Отчёт</button>
     <button class="tab-btn" onclick="switchTab('intake')">📦 Приёмка</button>
   </div>
 
-  <!-- ВКЛАДКА: ОТЧЕТ -->
+  <!-- ВКЛАДКА 1: ОТЧЕТ -->
   <div id="tab-report" class="tab-content active">
     <div class="controls">
-      <!-- Переключатель периодов из чата -->
+      <!-- Переключатель периодов -->
       <div class="btn-group">
-        <button onclick="setPeriod('current_week', this)" class="active">Тек. неделя</button>
+        <button onclick="setPeriod('all', this)" class="active">Все</button>
+        <button onclick="setPeriod('current_week', this)">Тек. неделя</button>
         <button onclick="setPeriod('last_week', this)">Прошлая неделя</button>
         <button onclick="setPeriod('month', this)">Месяц</button>
-        <button onclick="setPeriod('all', this)">Все</button>
       </div>
 
-      <!-- Выбор месяца (выпадает при выборе периода 'month') -->
+      <!-- Выбор месяца -->
       <div class="select-row" id="monthContainer" style="display:none;">
         <select id="monthSelect" onchange="loadData()"></select>
       </div>
 
-      <!-- Выбор судна -->
+      <!-- Фильтр по судну -->
       <div class="select-row">
         <select id="vesselSelect" onchange="renderData()">
           <option value="">Все суда</option>
         </select>
       </div>
 
-      <!-- Кнопка экспорта в Excel -->
       <button class="excel-btn" onclick="exportToExcel()">📊 Скачать в Excel (.xlsx)</button>
     </div>
 
-    <!-- Контейнер для вывода записей -->
     <div id="dataList" class="loader">Загрузка данных...</div>
   </div>
 
-  <!-- ВКЛАДКА: ПРИЁМКА (Ваша форма приёмки) -->
+  <!-- ВКЛАДКА 2: ФОРМА ПРИЁМКИ -->
   <div id="tab-intake" class="tab-content">
     <div class="controls">
-      <p style="text-align: center; color: #666; margin: 10px 0;">Форма приёмки груза</p>
-      <!-- Здесь остается ваш существующий HTML формы приёмки -->
+      <form id="intakeForm" onsubmit="handleFormSubmit(event)">
+        <label>Группа / Маркировка (CELST):</label>
+        <input type="text" id="formGroup" placeholder="Например: CELST-123" required>
+
+        <label>Паллеты (шт):</label>
+        <input type="number" id="formPallets" value="0" min="0" step="any">
+
+        <label>Коробки 15кг (шт):</label>
+        <input type="number" id="formBox15" value="0" min="0" step="any">
+
+        <label>Коробки 25кг (шт):</label>
+        <input type="number" id="formBox25" value="0" min="0" step="any">
+
+        <label>Ссылка на фото (Drive):</label>
+        <input type="url" id="formPhoto" placeholder="https://drive.google.com/...">
+
+        <label>Комментарий:</label>
+        <textarea id="formComment" rows="2" placeholder="Примечание..."></textarea>
+
+        <button type="submit" class="submit-btn">✅ Сохранить приёмку</button>
+      </form>
     </div>
   </div>
 
   <script>
-    // Инициализация Telegram WebApp
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // ⚠️ Укажите здесь актуальную ссылку на ваш Apps Script Web App (doGet)
+    // ⚠️ ВСТАВЬТЕ СЮДА ВАШУ ССЫЛКУ ИЗ APPS SCRIPT (DEPLOYMENT WEB APP URL)
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyLVZ-hbSIJ1DuJARE4-Y_y-hERSGpQJg0eoIfxSza5-5Gzy1VTF_zUUauBMtzwzW8a/exec"; 
 
-    let currentPeriod = 'current_week';
+    let currentPeriod = 'all';
     let rawItems = [];
     let vesselsList = [];
 
-    // Генерируем 12 прошлых месяцев для Dropdown
     function initMonths() {
       const select = document.getElementById('monthSelect');
       select.innerHTML = '';
@@ -117,7 +125,6 @@
       }
     }
 
-    // Переключение табов Отчет / Приемка
     function switchTab(tab) {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -131,7 +138,6 @@
       }
     }
 
-    // Выбор периода фильтрации
     function setPeriod(p, btn) {
       currentPeriod = p;
       document.querySelectorAll('.btn-group button').forEach(b => b.classList.remove('active'));
@@ -141,7 +147,6 @@
       loadData();
     }
 
-    // Загрузка данных с бэкенда (Apps Script)
     async function loadData() {
       document.getElementById('dataList').innerHTML = "Загрузка данных...";
       let url = `${SCRIPT_URL}?action=getShipList&period=${currentPeriod}`;
@@ -161,11 +166,10 @@
         updateVesselsDropdown();
         renderData();
       } catch (e) {
-        document.getElementById('dataList').innerHTML = "<div class='loader'>Ошибка загрузки данных. Проверьте соединение.</div>";
+        document.getElementById('dataList').innerHTML = "<div class='loader'>Ошибка загрузки. Проверьте SCRIPT_URL</div>";
       }
     }
 
-    // Обновление Dropdown списка судов
     function updateVesselsDropdown() {
       const select = document.getElementById('vesselSelect');
       const selected = select.value;
@@ -176,13 +180,12 @@
       });
     }
 
-    // Отрисовка списка карточек
     function renderData() {
       const selectedVessel = document.getElementById('vesselSelect').value;
       const filtered = rawItems.filter(item => !selectedVessel || item.vessel === selectedVessel);
 
       if (filtered.length === 0) {
-        document.getElementById('dataList').innerHTML = "<div class='loader'>Записей за выбранный период не найдено</div>";
+        document.getElementById('dataList').innerHTML = "<div class='loader'>Записей не найдено</div>";
         return;
       }
 
@@ -195,11 +198,11 @@
               <span class="badge">${item.status}</span>
             </div>
             <div class="card-body">
-              <b>Документ:</b> ${item.doc}<br>
+              <b>Документ/Группа:</b> ${item.doc}<br>
               <b>Дата:</b> ${item.date}<br>
               <b>Паллеты:</b> ${item.pallets} | <b>15кг:</b> ${item.box15} | <b>25кг:</b> ${item.box25}<br>
               ${item.comment ? `<b>Коммент:</b> ${item.comment}<br>` : ''}
-              ${item.photo ? `<a href="${item.photo}" target="_blank" class="photo-link">📷 Посмотреть фото</a>` : ''}
+              ${item.photo ? `<a href="${item.photo}" target="_blank" style="color:#007aff;">📷 Фото</a>` : ''}
             </div>
           </div>
         `;
@@ -207,7 +210,6 @@
       document.getElementById('dataList').innerHTML = html;
     }
 
-    // Экспорт текущего отфильтрованного отчета в Excel (.xlsx)
     function exportToExcel() {
       const selectedVessel = document.getElementById('vesselSelect').value;
       const filtered = rawItems.filter(item => !selectedVessel || item.vessel === selectedVessel);
@@ -232,14 +234,16 @@
 
       const worksheet = XLSX.utils.json_to_sheet(excelData);
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Реестр Приёмки");
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Реестр");
 
-      // Скачивание файла с текущей датой в названии
-      const fileName = `Отчет_Приемка_${new Date().toISOString().slice(0,10)}.xlsx`;
-      XLSX.writeFile(workbook, fileName);
+      XLSX.writeFile(workbook, `Отчет_Приемка_${new Date().toISOString().slice(0,10)}.xlsx`);
     }
 
-    // Старт работы
+    async function handleFormSubmit(e) {
+      e.preventDefault();
+      alert("Форма отправлена! (Добавьте ваш обработчик сохранения)");
+    }
+
     initMonths();
     loadData();
   </script>
