@@ -79,10 +79,9 @@
     <div class="controls">
       <form id="intakeForm" onsubmit="handleFormSubmit(event)">
         
-        <!-- Только выбор из списка -->
-        <label>Выберите номер документа / Коносамент:</label>
+        <label>Выберите номер документа (из Реестра):</label>
         <select id="formDocSelect" required>
-          <option value="">Загрузка документов...</option>
+          <option value="">Загрузка документов из Реестра...</option>
         </select>
 
         <label>Маркировка / Группа:</label>
@@ -113,7 +112,6 @@
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // ⚠️ Укажите ваш перераспределенный URL Apps Script (/exec)
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyLVZ-hbSIJ1DuJARE4-Y_y-hERSGpQJg0eoIfxSza5-5Gzy1VTF_zUUauBMtzwzW8a/exec"; 
 
     let currentPeriod = 'all';
@@ -194,7 +192,7 @@
         updateDocsDropdown();
         renderData();
       } catch (e) {
-        document.getElementById('dataList').innerHTML = "<div class='loader'>Ошибка подгрузки данных из таблицы</div>";
+        document.getElementById('dataList').innerHTML = "<div class='loader'>Ошибка загрузки. Проверьте SCRIPT_URL</div>";
       }
     }
 
@@ -209,9 +207,9 @@
 
     function updateDocsDropdown() {
       const select = document.getElementById('formDocSelect');
-      select.innerHTML = '<option value="">-- Выберите документ --</option>';
+      select.innerHTML = '<option value="">-- Выберите документ из Реестра --</option>';
       if (docsList.length === 0) {
-        select.innerHTML = '<option value="">Документы не найдены</option>';
+        select.innerHTML = '<option value="">Документы в Реестре не найдены</option>';
         return;
       }
       docsList.forEach(d => {
@@ -273,7 +271,7 @@
 
       const worksheet = XLSX.utils.json_to_sheet(excelData);
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Реестр");
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Приёмка");
 
       XLSX.writeFile(workbook, `Отчет_Приемка_${new Date().toISOString().slice(0,10)}.xlsx`);
     }
@@ -283,7 +281,7 @@
       
       const docSelect = document.getElementById('formDocSelect').value;
       if (!docSelect) {
-        alert("Пожалуйста, выберите номер документа из списка!");
+        alert("Выберите номер документа!");
         return;
       }
 
