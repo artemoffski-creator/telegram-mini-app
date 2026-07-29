@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Система Приёмки Грузов</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      --bg: var(--tg-theme-bg-color, #f4f4f5);
+      --text: var(--tg-theme-text-color, #000000);
+      --card: var(--tg-theme-secondary-bg-color, #ffffff);
+      --btn: var(--tg-theme-button-color, #2481cc);
+      --btn-text: var(--tg-theme-button-text-color, #ffffff);
+      --hint: var(--tg-theme-hint-color, #8e8e93);
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 12px; }
+    .nav { display: flex; gap: 8px; margin-bottom: 12px; }
+    .nav-btn { flex: 1; padding: 10px; border: none; border-radius: 8px; background: rgba(120,120,128,0.16); color: var(--text); font-weight: 600; cursor: pointer; }
+    .nav-btn.active { background: var(--btn); color: var(--btn-text); }
+    .view-section { display: none; }
+    .view-section.active { display: block; }
+    .card { background: var(--card); border-radius: 12px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .input-box { width: 100%; box-sizing: border-box; padding: 10px; border-radius: 8px; border: 1px solid rgba(120,120,128,0.2); background: var(--bg); color: var(--text); margin-bottom: 10px; font-size: 14px; outline: none; }
+    label { font-size: 12px; color: var(--hint); margin-bottom: 4px; display: block; }
+    .btn-submit { width: 100%; padding: 12px; background: var(--btn); color: var(--btn-text); border: none; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; }
+    .doc-num { background: rgba(120,120,128,0.12); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 13px; margin-right: 4px; }
+    .loader { text-align: center; padding: 20px; color: var(--hint); }
+  </style>
+</head>
+<body>
+
+  <!-- Навигация -->
+  <div class="nav">
+    <button class="nav-btn active" onclick="switchTab('reports')">📋 Отчёты</button>
+    <button class="nav-btn" onclick="switchTab('form')">📦 Оформить приёмку</button>
+  </div>
+
+  <!-- Вкладка 1: Отчёты -->
+  <div id="tab-reports" class="view-section active">
+    <input type="text" id="searchInput" class="input-box" placeholder="🔍 Поиск по суду или номеру..." oninput="filterData()">
+    <div id="reportsContent"><div class="loader">⏳ Загрузка...</div></div>
+  </div>
+
+  <!-- Вкладка 2: Форма приёмки -->
+  <div id="tab-form" class="view-section">
+    <div class="card">
+      <label>Судно:</label>
+      <select id="shipSelect" class="input-box"><option>Загрузка...</option></select>
+
+      <label>Номер документа / накладной:</label>
+      <input type="text" id="docNum" class="input-box" placeholder="Например: CELST-102">
+
+      <div style="display: flex; gap: 8px;">
+        <div style="flex:1;"><label>Паллеты:</label><input type="number" id="pallets" class="input-box" value="0"></div>
+        <div style="flex:1;"><label>Коробки 15кг:</label><input type="number" id="box15" class="input-box" value="0"></div>
+        <div style="flex:1;"><label>Коробки 25кг:</label><input type="number" id="box25" class="input-box" value="0"></div>
+      </div>
+
+      <label>Комментарий:</label>
+      <input type="text" id="comment" class="input-box" placeholder="Необязательно">
+
+      <label>Фотография документа / груза:</label>
+      <input type="file" id="fileInput" accept="image/*" class="input-box">
+
+      <button class="btn-submit" onclick="submitPriemka()">🚀 Отправить приёмку</button>
+    </div>
+  </div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+
+    // Укажите URL вашего опубликованного Google Apps Script Web App
+    const API_URL = "https://script.google.com/macros/s/AKfycbwQZafBxFKxQCrlVxyIC0wdxnOkEmWtN0cCPiHbD4OJHcAXZXWc5c16fS4eIC55k60/exec"; 
+
+    let rawReports = [];
+
+    function switchTab(tab) {
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
+      if (tab === 'reports') {
+        document.querySelectorAll('.nav-btn')[0].classList.add('active');
+        document.getElementById('tab-reports').classList.add('active');
+      } else {
+        document.querySelectorAll('.nav-btn')[1].classList.add('active');
+        document.getElementById('tab-form').classList.add('active');
+        loadShipsDropdown();
+      }
+    }
+
+    async function loadReports() {
+      try {
+        const res = await fetch(`${API_URL}?action=get_ship_list`);
+        const json = await res.json();
+        if (json.status === "success") {
+          rawReports = json.data;
+          renderReports(rawReports);
+        }
+      } catch (e) {
+        document.getElementById('reportsContent').innerHTML = '<div class="loader">❌ Ошибка загрузки данных</div>';
+      }
+    }
+
+    function renderReports(data) {
+      const container = document.getElementById('reportsContent');
+      if (!data || data.length === 0) { container.innerHTML = '<div class="loader">Документы не найдены</div>'; return; }
+      let html = '';
+      data.forEach(group => {
+        html += `<div style="font-weight:bold; margin:12px 0 6px 0; color:var(--btn);">📅 ${group.date}</div>`;
+        group.ships.forEach(s => {
+          html += `<div class="card"><div style="font-weight:600; font-size:15px;">🚢 ${s.shipName}</div>`;
+          s.deliveries.forEach(d => {
+            html += `<div style="margin-top:6px; padding-top:4px; border-top:1px solid rgba(120,120,128,0.1);">`;
+            d.nums.forEach(n => { html += `<span class="doc-num">${n}</span>`; });
+            if (d.totalPallets > 0) html += `<div style="font-size:13px;">🚛 Паллеты: <b>${d.totalPallets}</b></div>`;
+            if (d.totalBox15 > 0) html += `<div style="font-size:13px;">📦 Коробки 15кг: <b>${d.totalBox15}</b></div>`;
+            if (d.totalBox25 > 0) html += `<div style="font-size:13px;">📦 Коробки 25кг: <b>${d.totalBox25}</b></div>`;
+            if (d.comment) html += `<div style="font-size:12px; color:var(--hint);">💬 ${d.comment}</div>`;
+            if (d.photoUrl) html += `<a href="${d.photoUrl}" target="_blank" style="display:inline-block; margin-top:4px; font-size:12px; color:var(--btn);">🖼 Папка с фото</a>`;
+            html += `</div>`;
+          });
+          html += `</div>`;
+        });
+      });
+      container.innerHTML = html;
+    }
+
+    async function loadShipsDropdown() {
+      const select = document.getElementById('shipSelect');
+      try {
+        const res = await fetch(`${API_URL}?action=get_ships`);
+        const json = await res.json();
+        if (json.ships) {
+          select.innerHTML = json.ships.map(s => `<option value="${s}">${s}</option>`).join('');
+        }
+      } catch (e) { select.innerHTML = '<option>Ошибка загрузки судов</option>'; }
+    }
+
+    async function submitPriemka() {
+      const shipName = document.getElementById('shipSelect').value;
+      const docNum = document.getElementById('docNum').value.trim();
+      if (!shipName || !docNum) { tg.showAlert("Заполните судно и номер документа!"); return; }
+
+      const fileInput = document.getElementById('fileInput').files[0];
+      let fileData = null;
+
+      if (fileInput) {
+        fileData = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve({ name: fileInput.name, type: fileInput.type, base64: reader.result });
+          reader.readAsDataURL(fileInput);
+        });
+      }
+
+      tg.MainButton.setText("Отправка...").show();
+
+      const payload = {
+        action: "submit_priemka",
+        userId: tg.initDataUnsafe?.user?.id,
+        shipName: shipName,
+        docNum: docNum,
+        pallets: parseFloat(document.getElementById('pallets').value) || 0,
+        box15: parseFloat(document.getElementById('box15').value) || 0,
+        box25: parseFloat(document.getElementById('box25').value) || 0,
+        comment: document.getElementById('comment').value,
+        file: fileData
+      };
+
+      try {
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+        const json = await res.json();
+        tg.MainButton.hide();
+        if (json.status === "success") {
+          tg.showAlert("✅ Приёмка успешно сохранена!");
+          switchTab('reports');
+          loadReports();
+        } else { tg.showAlert("❌ Ошибка: " + json.message); }
+      } catch (e) {
+        tg.MainButton.hide();
+        tg.showAlert("❌ Ошибка сети при отправке!");
+      }
+    }
+
+    function filterData() {
+      const q = document.getElementById('searchInput').value.toLowerCase().trim();
+      if (!q) { renderReports(rawReports); return; }
+      const res = [];
+      rawReports.forEach(g => {
+        const ships = [];
+        g.ships.forEach(s => {
+          const matchShip = s.shipName.toLowerCase().includes(q);
+          const matchDeliv = s.deliveries.filter(d => d.nums.some(n => n.toLowerCase().includes(q)));
+          if (matchShip || matchDeliv.length > 0) ships.push({ shipName: s.shipName, deliveries: matchShip ? s.deliveries : matchDeliv });
+        });
+        if (ships.length > 0) res.push({ date: g.date, ships: ships });
+      });
+      renderReports(res);
+    }
+
+    loadReports();
+  </script>
+</body>
+</html>
+
