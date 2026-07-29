@@ -3,226 +3,245 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Приёмка и Отчёты</title>
+  <title>TMA Cargo System</title>
+  
+  <!-- Telegram WebApp SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- SheetJS для клиентского экспорта в Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
   <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: var(--tg-theme-bg-color, #f4f4f5);
-      color: var(--tg-theme-text-color, #000);
-      margin: 0;
-      padding: 12px;
-    }
-    .nav-bar {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-    .nav-btn {
-      flex: 1;
-      padding: 10px;
-      border: none;
-      border-radius: 10px;
-      background: var(--tg-theme-secondary-bg-color, #e4e4e7);
-      color: var(--tg-theme-text-color, #000);
-      font-weight: bold;
-      cursor: pointer;
-    }
-    .nav-btn.active {
-      background: var(--tg-theme-button-color, #0088cc);
-      color: var(--tg-theme-button-text-color, #fff);
-    }
-    .view-section { display: none; }
-    .view-section.active { display: block; }
-    .card {
-      background: var(--tg-theme-secondary-bg-color, #ffffff);
-      padding: 12px;
-      border-radius: 12px;
-      margin-bottom: 10px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-    .input-box {
-      width: 100%;
-      padding: 10px;
-      margin: 6px 0 12px 0;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      box-sizing: border-box;
-      background: var(--tg-theme-bg-color, #fff);
-      color: var(--tg-theme-text-color, #000);
-    }
-    .btn-submit {
-      width: 100%;
-      padding: 12px;
-      border: none;
-      border-radius: 10px;
-      background: var(--tg-theme-button-color, #22c55e);
-      color: var(--tg-theme-button-text-color, #fff);
-      font-weight: bold;
-      font-size: 16px;
-      cursor: pointer;
-    }
-    label { font-size: 12px; font-weight: 600; opacity: 0.8; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f4f7; margin: 0; padding: 12px; color: #333; }
+    
+    /* Табы (Переключение между отчетом и приемкой) */
+    .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+    .tab-btn { flex: 1; padding: 10px; background: #e3e3e8; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; color: #555; }
+    .tab-btn.active { background: #007aff; color: #fff; }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Блок фильтров и управления */
+    .controls { background: #fff; padding: 12px; border-radius: 12px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    .btn-group { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 8px; }
+    .btn-group button { border: 1px solid #007aff; background: #fff; color: #007aff; padding: 6px 12px; border-radius: 8px; font-size: 13px; white-space: nowrap; cursor: pointer; }
+    .btn-group button.active { background: #007aff; color: #fff; }
+    
+    .select-row { display: flex; gap: 8px; margin-bottom: 8px; }
+    select { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #ccc; font-size: 14px; background: #fff; }
+    
+    .excel-btn { width: 100%; background: #34c759; color: #fff; border: none; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 14px; cursor: pointer; }
+    .excel-btn:active { background: #2ca84a; }
+
+    /* Карточки отчета */
+    .card { background: #fff; border-radius: 10px; padding: 12px; margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
+    .card-header { display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; margin-bottom: 6px; border-bottom: 1px solid #f0f0f0; padding-bottom: 6px; }
+    .badge { background: #e5f1ff; color: #007aff; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+    .card-body { font-size: 13px; color: #444; line-height: 1.5; }
+    .photo-link { display: inline-block; margin-top: 6px; color: #007aff; text-decoration: none; font-weight: 500; }
+
+    /* Индикаторы загрузки */
+    .loader { text-align: center; padding: 20px; color: #777; font-size: 14px; }
   </style>
 </head>
 <body>
 
-  <!-- Навигация -->
-  <div class="nav-bar">
-    <button class="nav-btn active" onclick="switchTab('reports')">📋 Отчёты</button>
-    <button class="nav-btn" onclick="switchTab('form')">📦 Оформить приёмку</button>
+  <!-- Навигация по вкладкам -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('report')">📋 Отчёт</button>
+    <button class="tab-btn" onclick="switchTab('intake')">📦 Приёмка</button>
   </div>
 
-  <!-- Вкладка 1: Отчёты -->
-  <div id="tab-reports" class="view-section active">
-    <select id="periodSelect" class="input-box" onchange="loadReports()">
-      <option value="all">За всё время</option>
-      <option value="today">За сегодня</option>
-      <option value="week">За неделю</option>
-    </select>
-    <div id="reportsContainer">Загрузка данных...</div>
-  </div>
-
-  <!-- Вкладка 2: Форма приёмки -->
-  <div id="tab-form" class="view-section">
-    <div class="card">
-      <label>Документ приёмки (группа):</label>
-      <select id="groupSelect" class="input-box"><option>Загрузка доступных документов...</option></select>
-
-      <div style="display: flex; gap: 8px;">
-        <div style="flex:1;"><label>Паллеты:</label><input type="number" id="pallets" class="input-box" value="0"></div>
-        <div style="flex:1;"><label>Коробки 15кг:</label><input type="number" id="box15" class="input-box" value="0"></div>
-        <div style="flex:1;"><label>Коробки 25кг:</label><input type="number" id="box25" class="input-box" value="0"></div>
+  <!-- ВКЛАДКА: ОТЧЕТ -->
+  <div id="tab-report" class="tab-content active">
+    <div class="controls">
+      <!-- Переключатель периодов из чата -->
+      <div class="btn-group">
+        <button onclick="setPeriod('current_week', this)" class="active">Тек. неделя</button>
+        <button onclick="setPeriod('last_week', this)">Прошлая неделя</button>
+        <button onclick="setPeriod('month', this)">Месяц</button>
+        <button onclick="setPeriod('all', this)">Все</button>
       </div>
 
-      <label>Комментарий:</label>
-      <input type="text" id="comment" class="input-box" placeholder="Необязательно">
+      <!-- Выбор месяца (выпадает при выборе периода 'month') -->
+      <div class="select-row" id="monthContainer" style="display:none;">
+        <select id="monthSelect" onchange="loadData()"></select>
+      </div>
 
-      <label>Фотография груза / акта:</label>
-      <input type="file" id="fileInput" accept="image/*" class="input-box">
+      <!-- Выбор судна -->
+      <div class="select-row">
+        <select id="vesselSelect" onchange="renderData()">
+          <option value="">Все суда</option>
+        </select>
+      </div>
 
-      <button class="btn-submit" onclick="submitPriemka()">🚀 Подтвердить и принять</button>
+      <!-- Кнопка экспорта в Excel -->
+      <button class="excel-btn" onclick="exportToExcel()">📊 Скачать в Excel (.xlsx)</button>
+    </div>
+
+    <!-- Контейнер для вывода записей -->
+    <div id="dataList" class="loader">Загрузка данных...</div>
+  </div>
+
+  <!-- ВКЛАДКА: ПРИЁМКА (Ваша форма приёмки) -->
+  <div id="tab-intake" class="tab-content">
+    <div class="controls">
+      <p style="text-align: center; color: #666; margin: 10px 0;">Форма приёмки груза</p>
+      <!-- Здесь остается ваш существующий HTML формы приёмки -->
     </div>
   </div>
 
   <script>
+    // Инициализация Telegram WebApp
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // ⚠️ ВАЖНО: Укажите вашу актуальную ссылку на Web App (заканчивающуюся на /exec)
-    const API_URL = "https://script.google.com/macros/s/AKfycbyLVZ-hbSIJ1DuJARE4-Y_y-hERSGpQJg0eoIfxSza5-5Gzy1VTF_zUUauBMtzwzW8a/exec";
+    // ⚠️ Укажите здесь актуальную ссылку на ваш Apps Script Web App (doGet)
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyLVZ-hbSIJ1DuJARE4-Y_y-hERSGpQJg0eoIfxSza5-5Gzy1VTF_zUUauBMtzwzW8a/exec"; 
 
+    let currentPeriod = 'current_week';
+    let rawItems = [];
+    let vesselsList = [];
+
+    // Генерируем 12 прошлых месяцев для Dropdown
+    function initMonths() {
+      const select = document.getElementById('monthSelect');
+      select.innerHTML = '';
+      const now = new Date();
+      for (let i = 0; i < 12; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const name = d.toLocaleString('ru', { month: 'long', year: 'numeric' });
+        select.innerHTML += `<option value="${val}">${name}</option>`;
+      }
+    }
+
+    // Переключение табов Отчет / Приемка
     function switchTab(tab) {
-      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
-      if (tab === 'reports') {
-        document.querySelectorAll('.nav-btn')[0].classList.add('active');
-        document.getElementById('tab-reports').classList.add('active');
-        loadReports();
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      
+      if (tab === 'report') {
+        document.querySelectorAll('.tab-btn')[0].classList.add('active');
+        document.getElementById('tab-report').classList.add('active');
       } else {
-        document.querySelectorAll('.nav-btn')[1].classList.add('active');
-        document.getElementById('tab-form').classList.add('active');
-        loadGroupsDropdown();
+        document.querySelectorAll('.tab-btn')[1].classList.add('active');
+        document.getElementById('tab-intake').classList.add('active');
       }
     }
 
-    // Загрузка отчетов
-       // Загрузка и рендеринг отчётов
-    async function loadReports() {
-      const container = document.getElementById('reportsContainer');
-      const period = document.getElementById('periodSelect').value;
-      container.innerHTML = "<div class='card'>⏳ Загрузка отчётов...</div>";
+    // Выбор периода фильтрации
+    function setPeriod(p, btn) {
+      currentPeriod = p;
+      document.querySelectorAll('.btn-group button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      document.getElementById('monthContainer').style.display = (p === 'month') ? 'flex' : 'none';
+      loadData();
+    }
+
+    // Загрузка данных с бэкенда (Apps Script)
+    async function loadData() {
+      document.getElementById('dataList').innerHTML = "Загрузка данных...";
+      let url = `${SCRIPT_URL}?action=getShipList&period=${currentPeriod}`;
+      
+      if (currentPeriod === 'month') {
+        const m = document.getElementById('monthSelect').value;
+        url += `&month=${m}`;
+      }
 
       try {
-        const res = await fetch(`${API_URL}?action=get_ship_list&period=${period}`);
+        const res = await fetch(url);
         const data = await res.json();
+        
+        rawItems = data.items || [];
+        vesselsList = data.vessels || [];
 
-        if (!Array.isArray(data) || data.length === 0) {
-          container.innerHTML = "<div class='card'>📭 Нет данных по приёмке за выбранный период</div>";
-          return;
-        }
+        updateVesselsDropdown();
+        renderData();
+      } catch (e) {
+        document.getElementById('dataList').innerHTML = "<div class='loader'>Ошибка загрузки данных. Проверьте соединение.</div>";
+      }
+    }
 
-        container.innerHTML = data.map(item => `
+    // Обновление Dropdown списка судов
+    function updateVesselsDropdown() {
+      const select = document.getElementById('vesselSelect');
+      const selected = select.value;
+      select.innerHTML = '<option value="">Все суда</option>';
+      
+      vesselsList.forEach(v => {
+        select.innerHTML += `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`;
+      });
+    }
+
+    // Отрисовка списка карточек
+    function renderData() {
+      const selectedVessel = document.getElementById('vesselSelect').value;
+      const filtered = rawItems.filter(item => !selectedVessel || item.vessel === selectedVessel);
+
+      if (filtered.length === 0) {
+        document.getElementById('dataList').innerHTML = "<div class='loader'>Записей за выбранный период не найдено</div>";
+        return;
+      }
+
+      let html = '';
+      filtered.forEach(item => {
+        html += `
           <div class="card">
-            <strong style="font-size: 15px;">📦 Документ: ${item.doc || 'Без номера'}</strong><br>
-            <small style="color: #666;">📅 Дата: ${item.date}</small>
-            <hr style="border:0; border-top: 1px solid #eee; margin: 8px 0;">
-            <div>📊 <b>Паллеты:</b> ${item.pallets} | <b>15кг:</b> ${item.box15} | <b>25кг:</b> ${item.box25}</div>
-            ${item.comment ? `<div style="margin-top: 4px; font-size: 13px; color: #444;">💬 <i>${item.comment}</i></div>` : ''}
-            ${item.photo ? `<div style="margin-top: 6px;"><a href="${item.photo}" target="_blank" style="color: #0088cc; font-size: 13px;">🖼 Смотреть фото</a></div>` : ''}
+            <div class="card-header">
+              <span>🚢 ${item.vessel}</span>
+              <span class="badge">${item.status}</span>
+            </div>
+            <div class="card-body">
+              <b>Документ:</b> ${item.doc}<br>
+              <b>Дата:</b> ${item.date}<br>
+              <b>Паллеты:</b> ${item.pallets} | <b>15кг:</b> ${item.box15} | <b>25кг:</b> ${item.box25}<br>
+              ${item.comment ? `<b>Коммент:</b> ${item.comment}<br>` : ''}
+              ${item.photo ? `<a href="${item.photo}" target="_blank" class="photo-link">📷 Посмотреть фото</a>` : ''}
+            </div>
           </div>
-        `).join('');
-
-      } catch (e) {
-        console.error("Ошибка при загрузке отчетов:", e);
-        container.innerHTML = "<div class='card'>⚠️ Ошибка загрузки отчётов. Проверьте консоль браузера.</div>";
-      }
+        `;
+      });
+      document.getElementById('dataList').innerHTML = html;
     }
 
+    // Экспорт текущего отфильтрованного отчета в Excel (.xlsx)
+    function exportToExcel() {
+      const selectedVessel = document.getElementById('vesselSelect').value;
+      const filtered = rawItems.filter(item => !selectedVessel || item.vessel === selectedVessel);
 
-    // Подгрузка незакрытых документов (CELST)
-    async function loadGroupsDropdown() {
-      const select = document.getElementById('groupSelect');
-      try {
-        const res = await fetch(`${API_URL}?action=get_groups`);
-        const json = await res.json();
-        if (json.groups && json.groups.length > 0) {
-          select.innerHTML = json.groups.map(g => `<option value="${g}">📦 Документ: ${g}</option>`).join('');
-        } else {
-          select.innerHTML = '<option value="">⚠️ Нет доступных документов</option>';
-        }
-      } catch (e) { 
-        select.innerHTML = '<option value="">Ошибка загрузки документов</option>'; 
+      if (filtered.length === 0) {
+        alert("Нет данных для экспорта!");
+        return;
       }
+
+      const excelData = filtered.map(i => ({
+        "Судно": i.vessel,
+        "Документ / Маркировка": i.doc,
+        "Группа": i.group,
+        "Статус": i.status,
+        "Дата приёмки": i.date,
+        "Паллеты": i.pallets,
+        "Коробки 15кг": i.box15,
+        "Коробки 25кг": i.box25,
+        "Комментарий": i.comment,
+        "Ссылка на фото": i.photo
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(excelData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Реестр Приёмки");
+
+      // Скачивание файла с текущей датой в названии
+      const fileName = `Отчет_Приемка_${new Date().toISOString().slice(0,10)}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
     }
 
-    // Отправка формы приёмки
-    async function submitPriemka() {
-      const groupCode = document.getElementById('groupSelect').value;
-      if (!groupCode) { tg.showAlert("Выберите доступный документ для приёмки!"); return; }
-
-      const fileInput = document.getElementById('fileInput').files[0];
-      let fileData = null;
-
-      if (fileInput) {
-        fileData = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve({ name: fileInput.name, type: fileInput.type, base64: reader.result });
-          reader.readAsDataURL(fileInput);
-        });
-      }
-
-      tg.MainButton.setText("Сохранение...").show();
-
-      const payload = {
-        action: "submit_priemka",
-        userId: tg.initDataUnsafe?.user?.id,
-        groupCode: groupCode,
-        pallets: parseFloat(document.getElementById('pallets').value) || 0,
-        box15: parseFloat(document.getElementById('box15').value) || 0,
-        box25: parseFloat(document.getElementById('box25').value) || 0,
-        comment: document.getElementById('comment').value,
-        file: fileData
-      };
-
-      try {
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
-        const json = await res.json();
-        tg.MainButton.hide();
-        if (json.status === "success") {
-          tg.showAlert("✅ Приёмка по документу " + groupCode + " успешно оформлена!");
-          switchTab('reports');
-        } else { 
-          tg.showAlert("❌ Ошибка: " + json.message); 
-        }
-      } catch (e) {
-        tg.MainButton.hide();
-        tg.showAlert("❌ Ошибка сети при отправке!");
-      }
-    }
-
-    // Инициализация при старте
-    loadReports();
+    // Старт работы
+    initMonths();
+    loadData();
   </script>
 </body>
 </html>
