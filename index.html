@@ -59,7 +59,7 @@
       </div>
 
       <div class="select-row" id="monthContainer" style="display:none;">
-        <select id="monthSelect" onchange="loadReportData()"></select>
+        <select id="monthSelect" onchange="loadData()"></select>
       </div>
 
       <div class="select-row">
@@ -79,12 +79,11 @@
     <div class="controls">
       <form id="intakeForm" onsubmit="handleFormSubmit(event)">
         
-        <label>Номер документа / Коносамент:</label>
-        <select id="formDocSelect" onchange="toggleCustomDocInput(this)">
+        <!-- Только выбор из списка -->
+        <label>Выберите номер документа / Коносамент:</label>
+        <select id="formDocSelect" required>
           <option value="">Загрузка документов...</option>
         </select>
-        
-        <input type="text" id="formDocCustom" placeholder="Введите номер документа" style="display: none;">
 
         <label>Маркировка / Группа:</label>
         <input type="text" id="formGroup" placeholder="Например: CELST-123">
@@ -114,12 +113,13 @@
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // ⚠️ ВСТАВЬТЕ СЮДА ВАШУ ССЫЛКУ ИЗ APPS SCRIPT (Заканчивается на /exec)
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw_GKMWf4NcaM6pyy-mJmTAIM4is1bG73vhBq8PeYytMvAQk70CLuSHXQqWQM-aMkQ/exec"; 
+    // ⚠️ Укажите ваш перераспределенный URL Apps Script (/exec)
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyLVZ-hbSIJ1DuJARE4-Y_y-hERSGpQJg0eoIfxSza5-5Gzy1VTF_zUUauBMtzwzW8a/exec"; 
 
     let currentPeriod = 'all';
     let rawItems = [];
     let vesselsList = [];
+    let docsList = [];
     let base64Photo = "";
 
     function initMonths() {
@@ -153,7 +153,7 @@
       btn.classList.add('active');
       
       document.getElementById('monthContainer').style.display = (p === 'month') ? 'flex' : 'none';
-      loadReportData();
+      loadData();
     }
 
     function previewFile() {
@@ -170,21 +170,9 @@
       if (file) reader.readAsDataURL(file);
     }
 
-    function toggleCustomDocInput(select) {
-      const customInput = document.getElementById('formDocCustom');
-      if (select.value === '__custom__') {
-        customInput.style.display = 'block';
-        customInput.required = true;
-      } else {
-        customInput.style.display = 'none';
-        customInput.required = false;
-      }
-    }
-
-    // Загрузка только отчета
-    async function loadReportData() {
+    async function loadData() {
       document.getElementById('dataList').innerHTML = "Загрузка данных...";
-      let url = `${SCRIPT_URL}?action=getShipList&period=${currentPeriod}`;
+      let url = `${SCRIPT_URL}?period=${currentPeriod}`;
       if (currentPeriod === 'month') {
         url += `&month=${document.getElementById('monthSelect').value}`;
       }
@@ -193,32 +181,20 @@
         const res = await fetch(url);
         const data = await res.json();
         
+        if (data.error) {
+          document.getElementById('dataList').innerHTML = `<div class='loader'>Ошибка: ${data.error}</div>`;
+          return;
+        }
+
         rawItems = data.items || [];
         vesselsList = data.vessels || [];
+        docsList = data.docs || [];
 
         updateVesselsDropdown();
+        updateDocsDropdown();
         renderData();
       } catch (e) {
-        document.getElementById('dataList').innerHTML = "<div class='loader'>Ошибка соединения с бэкендом</div>";
-      }
-    }
-
-    // Загрузка документов напрямую для формы
-    async function loadDocsList() {
-      const select = document.getElementById('formDocSelect');
-      try {
-        const res = await fetch(`${SCRIPT_URL}?action=getDocs`);
-        const data = await res.json();
-        const docs = data.docs || [];
-
-        select.innerHTML = '<option value="">-- Выберите документ --</option>';
-        docs.forEach(d => {
-          select.innerHTML += `<option value="${d}">${d}</option>`;
-        });
-        select.innerHTML += '<option value="__custom__">+ Ввести вручную</option>';
-      } catch (e) {
-        select.innerHTML = '<option value="__custom__">+ Ввести вручную (ошибка загрузки)</option>';
-        toggleCustomDocInput({ value: '__custom__' });
+        document.getElementById('dataList').innerHTML = "<div class='loader'>Ошибка подгрузки данных из таблицы</div>";
       }
     }
 
@@ -228,6 +204,18 @@
       select.innerHTML = '<option value="">Все суда</option>';
       vesselsList.forEach(v => {
         select.innerHTML += `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`;
+      });
+    }
+
+    function updateDocsDropdown() {
+      const select = document.getElementById('formDocSelect');
+      select.innerHTML = '<option value="">-- Выберите документ --</option>';
+      if (docsList.length === 0) {
+        select.innerHTML = '<option value="">Документы не найдены</option>';
+        return;
+      }
+      docsList.forEach(d => {
+        select.innerHTML += `<option value="${d}">${d}</option>`;
       });
     }
 
@@ -294,11 +282,8 @@
       e.preventDefault();
       
       const docSelect = document.getElementById('formDocSelect').value;
-      const docCustom = document.getElementById('formDocCustom').value;
-      let finalDoc = docSelect === '__custom__' ? docCustom : docSelect;
-      
-      if (!finalDoc) {
-        alert("Укажите номер документа!");
+      if (!docSelect) {
+        alert("Пожалуйста, выберите номер документа из списка!");
         return;
       }
 
@@ -307,8 +292,7 @@
       btn.innerText = "Сохранение...";
 
       const payload = {
-        action: "saveIntake",
-        docNum: finalDoc,
+        docNum: docSelect,
         group: document.getElementById('formGroup').value,
         pallets: document.getElementById('formPallets').value,
         box15: document.getElementById('formBox15').value,
@@ -322,12 +306,10 @@
         alert("Приёмка успешно сохранена!");
         document.getElementById('intakeForm').reset();
         document.getElementById('photoPreview').style.display = "none";
-        document.getElementById('formDocCustom').style.display = "none";
         base64Photo = "";
         
         switchTab('report');
-        loadReportData();
-        loadDocsList();
+        loadData();
       } catch (err) {
         alert("Ошибка при сохранении!");
       } finally {
@@ -337,8 +319,7 @@
     }
 
     initMonths();
-    loadReportData();
-    loadDocsList();
+    loadData();
   </script>
 </body>
 </html>
