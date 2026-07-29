@@ -19,23 +19,26 @@
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
-    .controls { background: #fff; padding: 12px; border-radius: 12px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    .controls { background: #fff; padding: 14px; border-radius: 12px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
     .btn-group { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 8px; }
     .btn-group button { border: 1px solid #007aff; background: #fff; color: #007aff; padding: 6px 12px; border-radius: 8px; font-size: 13px; white-space: nowrap; cursor: pointer; }
     .btn-group button.active { background: #007aff; color: #fff; }
     
     .select-row { display: flex; gap: 8px; margin-bottom: 8px; }
-    select, input, textarea { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; font-size: 14px; background: #fff; margin-bottom: 8px; }
+    select, input, textarea { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; font-size: 14px; background: #fff; margin-bottom: 10px; }
     
     .excel-btn { width: 100%; background: #34c759; color: #fff; border: none; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 14px; cursor: pointer; }
     .submit-btn { width: 100%; background: #007aff; color: #fff; border: none; padding: 12px; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; }
+    .submit-btn:disabled { background: #ccc; }
 
     .card { background: #fff; border-radius: 10px; padding: 12px; margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
     .card-header { display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; margin-bottom: 6px; border-bottom: 1px solid #f0f0f0; padding-bottom: 6px; }
     .badge { background: #e5f1ff; color: #007aff; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
     .card-body { font-size: 13px; color: #444; line-height: 1.5; }
     .loader { text-align: center; padding: 20px; color: #777; font-size: 14px; }
-    label { font-size: 12px; font-weight: bold; color: #666; display: block; margin-bottom: 4px; }
+    label { font-size: 12px; font-weight: bold; color: #555; display: block; margin-bottom: 4px; }
+
+    #photoPreview { width: 100%; max-height: 180px; object-fit: cover; border-radius: 8px; margin-bottom: 10px; display: none; }
   </style>
 </head>
 <body>
@@ -49,7 +52,6 @@
   <!-- ВКЛАДКА 1: ОТЧЕТ -->
   <div id="tab-report" class="tab-content active">
     <div class="controls">
-      <!-- Переключатель периодов -->
       <div class="btn-group">
         <button onclick="setPeriod('all', this)" class="active">Все</button>
         <button onclick="setPeriod('current_week', this)">Тек. неделя</button>
@@ -57,12 +59,10 @@
         <button onclick="setPeriod('month', this)">Месяц</button>
       </div>
 
-      <!-- Выбор месяца -->
       <div class="select-row" id="monthContainer" style="display:none;">
         <select id="monthSelect" onchange="loadData()"></select>
       </div>
 
-      <!-- Фильтр по судну -->
       <div class="select-row">
         <select id="vesselSelect" onchange="renderData()">
           <option value="">Все суда</option>
@@ -79,8 +79,19 @@
   <div id="tab-intake" class="tab-content">
     <div class="controls">
       <form id="intakeForm" onsubmit="handleFormSubmit(event)">
-        <label>Группа / Маркировка (CELST):</label>
-        <input type="text" id="formGroup" placeholder="Например: CELST-123" required>
+        
+        <!-- Выбор номера документа из списка -->
+        <label>Номер документа / Коносамент:</label>
+        <select id="formDocSelect" onchange="toggleCustomDocInput(this)">
+          <option value="">-- Выберите документ --</option>
+          <option value="__custom__">+ Ввести вручную</option>
+        </select>
+        
+        <!-- Поле ручного ввода (скрыто по умолчанию) -->
+        <input type="text" id="formDocCustom" placeholder="Введите номер документа" style="display: none;">
+
+        <label>Маркировка / Группа:</label>
+        <input type="text" id="formGroup" placeholder="Например: CELST-123">
 
         <label>Паллеты (шт):</label>
         <input type="number" id="formPallets" value="0" min="0" step="any">
@@ -91,13 +102,14 @@
         <label>Коробки 25кг (шт):</label>
         <input type="number" id="formBox25" value="0" min="0" step="any">
 
-        <label>Ссылка на фото (Drive):</label>
-        <input type="url" id="formPhoto" placeholder="https://drive.google.com/...">
+        <label>Сделать / прикрепить фото:</label>
+        <input type="file" id="formPhotoFile" accept="image/*" capture="environment" onchange="previewFile()">
+        <img id="photoPreview" alt="Превью фото">
 
         <label>Комментарий:</label>
-        <textarea id="formComment" rows="2" placeholder="Примечание..."></textarea>
+        <textarea id="formComment" rows="2" placeholder="Примечание по грузу..."></textarea>
 
-        <button type="submit" class="submit-btn">✅ Сохранить приёмку</button>
+        <button type="submit" id="submitBtn" class="submit-btn">✅ Сохранить приёмку</button>
       </form>
     </div>
   </div>
@@ -106,12 +118,13 @@
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // ⚠️ ВСТАВЬТЕ СЮДА ВАШУ ССЫЛКУ ИЗ APPS SCRIPT (DEPLOYMENT WEB APP URL)
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyH1dlW2CpNhn31ewGIqLIofuUMJ6MTC7fI1foNAcYqPo403_i5tC8rdjaWpA3xuf7g/exec"; 
+    // ⚠️ ВСТАВЬТЕ СЮДА ВАШ URL APPS SCRIPT
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyLVZ-hbSIJ1DuJARE4-Y_y-hERSGpQJg0eoIfxSza5-5Gzy1VTF_zUUauBMtzwzW8a/exec"; 
 
     let currentPeriod = 'all';
     let rawItems = [];
     let vesselsList = [];
+    let base64Photo = "";
 
     function initMonths() {
       const select = document.getElementById('monthSelect');
@@ -147,6 +160,35 @@
       loadData();
     }
 
+    // Предпросмотр и конвертация выбранного фото
+    function previewFile() {
+      const file = document.getElementById('formPhotoFile').files[0];
+      const preview = document.getElementById('photoPreview');
+      const reader = new FileReader();
+
+      reader.addEventListener("load", function () {
+        preview.src = reader.result;
+        preview.style.display = "block";
+        base64Photo = reader.result;
+      }, false);
+
+      if (file) {
+        reader.readAsDataURL(file);
+      }
+    }
+
+    // Включение/выключение поля для ручного ввода документа
+    function toggleCustomDocInput(select) {
+      const customInput = document.getElementById('formDocCustom');
+      if (select.value === '__custom__') {
+        customInput.style.display = 'block';
+        customInput.required = true;
+      } else {
+        customInput.style.display = 'none';
+        customInput.required = false;
+      }
+    }
+
     async function loadData() {
       document.getElementById('dataList').innerHTML = "Загрузка данных...";
       let url = `${SCRIPT_URL}?action=getShipList&period=${currentPeriod}`;
@@ -164,6 +206,7 @@
         vesselsList = data.vessels || [];
 
         updateVesselsDropdown();
+        updateDocsDropdown();
         renderData();
       } catch (e) {
         document.getElementById('dataList').innerHTML = "<div class='loader'>Ошибка загрузки. Проверьте SCRIPT_URL</div>";
@@ -178,6 +221,18 @@
       vesselsList.forEach(v => {
         select.innerHTML += `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`;
       });
+    }
+
+    // Обновление списка уникальных документов для формы
+    function updateDocsDropdown() {
+      const select = document.getElementById('formDocSelect');
+      const docs = Array.from(new Set(rawItems.map(i => i.doc).filter(Boolean))).sort();
+      
+      select.innerHTML = '<option value="">-- Выберите документ --</option>';
+      docs.forEach(d => {
+        select.innerHTML += `<option value="${d}">${d}</option>`;
+      });
+      select.innerHTML += '<option value="__custom__">+ Ввести вручную</option>';
     }
 
     function renderData() {
@@ -198,7 +253,7 @@
               <span class="badge">${item.status}</span>
             </div>
             <div class="card-body">
-              <b>Документ/Группа:</b> ${item.doc}<br>
+              <b>Документ:</b> ${item.doc}<br>
               <b>Дата:</b> ${item.date}<br>
               <b>Паллеты:</b> ${item.pallets} | <b>15кг:</b> ${item.box15} | <b>25кг:</b> ${item.box25}<br>
               ${item.comment ? `<b>Коммент:</b> ${item.comment}<br>` : ''}
@@ -241,7 +296,52 @@
 
     async function handleFormSubmit(e) {
       e.preventDefault();
-      alert("Форма отправлена! (Добавьте ваш обработчик сохранения)");
+      
+      const docSelect = document.getElementById('formDocSelect').value;
+      const docCustom = document.getElementById('formDocCustom').value;
+      
+      let finalDoc = docSelect === '__custom__' ? docCustom : docSelect;
+      
+      if (!finalDoc) {
+        alert("Пожалуйста, выберите или введите номер документа!");
+        return;
+      }
+
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.innerText = "Сохранение...";
+
+      const payload = {
+        action: "saveIntake",
+        docNum: finalDoc,
+        group: document.getElementById('formGroup').value,
+        pallets: document.getElementById('formPallets').value,
+        box15: document.getElementById('formBox15').value,
+        box25: document.getElementById('formBox25').value,
+        comment: document.getElementById('formComment').value,
+        photoBase64: base64Photo
+      };
+
+      try {
+        await fetch(SCRIPT_URL, {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+        
+        alert("Приёмка успешно сохранена!");
+        document.getElementById('intakeForm').reset();
+        document.getElementById('photoPreview').style.display = "none";
+        document.getElementById('formDocCustom').style.display = "none";
+        base64Photo = "";
+        
+        switchTab('report');
+        loadData();
+      } catch (err) {
+        alert("Ошибка при сохранении!");
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "✅ Сохранить приёмку";
+      }
     }
 
     initMonths();
