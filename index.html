@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Приёмка и Отчетность</title>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Временная консоль для Telegram Telegram WebView -->
+  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+  <script>eruda.init();</script>
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 12px; background: #f4f5f7; color: #333; }
@@ -73,15 +76,14 @@
       
       <div id="photosPreviewContainer" class="preview-container"></div>
 
-      <button type="submit" id="submitBtn" class="submit-btn">✅ Сохранить приёмку</button>
+<button type="submit" id="submitBtn" class="submit-btn">✅ Сохранить приёмку</button>
     </form>
   </div>
 
   <!-- ВКЛАДКА: ОТЧЕТ -->
   <div id="tab-report" class="content-block">
     <div class="filter-card">
-
-<div class="filter-grid">
+      <div class="filter-grid">
         <div>
           <label for="filterDateFrom">Дата с:</label>
           <input type="date" id="filterDateFrom" onchange="applyFilters()">
@@ -116,8 +118,8 @@
     const SCRIPT_URL = "<?= scriptUrl ?>";
     
     let base64PhotosArray = []; 
-    let rawReportData = []; // Исходные данные от сервера
-    let filteredReportData = []; // Отфильтрованные данные
+    let rawReportData = []; 
+    let filteredReportData = []; 
 
     const tg = window.Telegram ? window.Telegram.WebApp : null;
     if (tg) tg.expand();
@@ -125,6 +127,18 @@
     document.addEventListener("DOMContentLoaded", function() {
       loadIntakeDocs();
     });
+
+    // Функция отправки POST запросов в Apps Script для обхода CORS в Telegram
+    async function apiPost(payload) {
+      const response = await fetch(SCRIPT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8"
+        },
+        body: JSON.stringify(payload)
+      });
+      return await response.json();
+    }
 
     function switchTab(tabName) {
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -141,14 +155,13 @@
       }
     }
 
-    // 1. Загрузка списка НЕ принятых документов
+    // 1. Загрузка списка НЕ принятых документов через POST
     async function loadIntakeDocs() {
       const select = document.getElementById('formDocSelect');
       select.innerHTML = '<option value="">Загрузка...</option>';
 
       try {
-        const res = await fetch(`${SCRIPT_URL}?action=getDocs`, { redirect: 'follow' });
-        const data = await res.json();
+        const data = await apiPost({ action: "getDocs" });
 
         select.innerHTML = '<option value="">-- Выберите документ --</option>';
 
@@ -184,7 +197,8 @@
           base64PhotosArray.push(base64Data);
 
           const img = document.createElement('img');
-          img.src = base64Data;
+
+img.src = base64Data;
           img.className = 'preview-thumb';
           container.appendChild(img);
         };
@@ -192,7 +206,7 @@
       });
     }
 
-    // 3. Сохранение формы
+    // 3. Сохранение формы через POST
     async function handleFormSubmit(e) {
       e.preventDefault();
 
@@ -202,11 +216,12 @@
         return;
       }
 
-const btn = document.getElementById('submitBtn');
+      const btn = document.getElementById('submitBtn');
       btn.disabled = true;
       btn.innerText = "Сохранение...";
 
       const payload = {
+        action: "saveIntake",
         docNum: docSelect,
         group: document.getElementById('formGroup').value,
         pallets: document.getElementById('formPallets').value,
@@ -217,34 +232,31 @@ const btn = document.getElementById('submitBtn');
       };
 
       try {
-        await fetch(SCRIPT_URL, {
-          method: "POST",
-          body: JSON.stringify(payload),
-          redirect: 'follow'
-        });
-        
-        alert("Приёмка успешно сохранена!");
-        document.getElementById('intakeForm').reset();
-        document.getElementById('photosPreviewContainer').innerHTML = "";
-        base64PhotosArray = [];
-        
-        switchTab('report');
+        const res = await apiPost(payload);
+        if (res.status === "success") {
+          alert("Приёмка успешно сохранена!");
+          document.getElementById('intakeForm').reset();
+          document.getElementById('photosPreviewContainer').innerHTML = "";
+          base64PhotosArray = [];
+          switchTab('report');
+        } else {
+          alert("Ошибка: " + res.message);
+        }
       } catch (err) {
-        alert("Ошибка при сохранении: " + err);
+        alert("Ошибка сети при сохранении: " + err);
       } finally {
         btn.disabled = false;
         btn.innerText = "✅ Сохранить приёмку";
       }
     }
 
-    // 4. Загрузка данных для отчета
+    // 4. Загрузка данных для отчета через POST
     async function loadReportData() {
       const tbody = document.getElementById('reportTableBody');
       tbody.innerHTML = '<tr><td colspan="4">Загрузка данных...</td></tr>';
 
       try {
-        const res = await fetch(`${SCRIPT_URL}?action=getReportData`, { redirect: 'follow' });
-        const result = await res.json();
+        const result = await apiPost({ action: "getReportData" });
 
         if (result.data && result.data.length > 0) {
           rawReportData = result.data;
@@ -260,7 +272,7 @@ const btn = document.getElementById('submitBtn');
       }
     }
 
-    // 5. Фильтрация по диапазону дат на стороне клиента
+    // 5. Фильтрация по диапазону дат
     function applyFilters() {
       const dateFrom = document.getElementById('filterDateFrom').value;
       const dateTo = document.getElementById('filterDateTo').value;
@@ -275,7 +287,7 @@ const btn = document.getElementById('submitBtn');
       renderReportTable(filteredReportData);
     }
 
-    // 6. Отрисовка таблицы отчета
+    // 6. Отрисовка таблицы
     function renderReportTable(data) {
       const tbody = document.getElementById('reportTableBody');
       tbody.innerHTML = "";
@@ -297,7 +309,7 @@ const btn = document.getElementById('submitBtn');
       });
     }
 
-    // 7. Выгрузка в Excel с учётом выбранных дат
+    // 7. Экспорт в Excel
     function exportToExcel() {
       if (!filteredReportData || filteredReportData.length === 0) {
         alert("Нет данных для выгрузки!");
@@ -313,7 +325,8 @@ const btn = document.getElementById('submitBtn');
 
       const worksheet = XLSX.utils.json_to_sheet(excelRows);
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Отчет");
+
+XLSX.utils.book_append_sheet(workbook, worksheet, "Отчет");
 
       worksheet['!cols'] = [
         { wch: 12 },
