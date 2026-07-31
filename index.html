@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Приёмка и Отчетность</title>
-  <!-- Подключаем SheetJS для экспорта в Excel -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -17,23 +16,26 @@
     .content-block { display: none; background: #fff; padding: 16px; border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
     .content-block.active { display: block; }
     
-    label { font-weight: 600; display: block; margin-top: 12px; margin-bottom: 4px; font-size: 14px; }
+    label { font-weight: 600; display: block; margin-top: 10px; margin-bottom: 4px; font-size: 13px; }
     input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
     
-    .btn-group { display: flex; gap: 8px; margin-bottom: 12px; }
-    button.action-btn { padding: 10px 14px; border: none; font-weight: bold; border-radius: 6px; cursor: pointer; }
-    button.refresh-btn { background: #6c757d; color: white; }
+    .filter-card { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 12px; margin-bottom: 14px; }
+    .filter-grid { display: flex; gap: 8px; }
+    .filter-grid > div { flex: 1; }
+
+    .btn-group { display: flex; gap: 8px; margin-top: 10px; }
+    button.action-btn { flex: 1; padding: 10px; border: none; font-weight: bold; border-radius: 6px; cursor: pointer; }
+    button.refresh-btn { background: #007bff; color: white; }
     button.export-btn { background: #28a745; color: white; }
     button.submit-btn { width: 100%; margin-top: 18px; padding: 12px; background: #007bff; color: white; border: none; font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer; }
     button:disabled { background: #a5a5a5; cursor: not-allowed; }
     
     table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
-    th, td { border: 1px solid #ddd; padding: 10px 8px; text-align: left; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
     th { background-color: #f1f3f5; }
 
-    /* Галерея превью выбранных фотографий */
     .preview-container { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-    .preview-thumb { width: 70px; height: 70px; object-fit: cover; border-radius: 6px; border: 1px solid #ccc; }
+    .preview-thumb { width: 65px; height: 65px; object-fit: cover; border-radius: 6px; border: 1px solid #ccc; }
   </style>
 </head>
 <body>
@@ -66,7 +68,7 @@
       <label for="formComment">Комментарий:</label>
       <textarea id="formComment" rows="2" placeholder="Дополнительная информация"></textarea>
 
-      <label for="formPhotoFile">Прикрепить фото (можно выбрать несколько):</label>
+      <label for="formPhotoFile">Прикрепить фото (несколько файлов):</label>
       <input type="file" id="formPhotoFile" accept="image/*" capture="environment" multiple onchange="handleMultiplePhotos()">
       
       <div id="photosPreviewContainer" class="preview-container"></div>
@@ -77,38 +79,48 @@
 
   <!-- ВКЛАДКА: ОТЧЕТ -->
   <div id="tab-report" class="content-block">
-    <div class="btn-group">
-      <button class="action-btn refresh-btn" onclick="loadReportData()">🔄  Обновить</button>
+    <div class="filter-card">
 
-<button class="action-btn export-btn" onclick="exportToExcel()">📥 Скачать Excel</button>
+<div class="filter-grid">
+        <div>
+          <label for="filterDateFrom">Дата с:</label>
+          <input type="date" id="filterDateFrom" onchange="applyFilters()">
+        </div>
+        <div>
+          <label for="filterDateTo">Дата по:</label>
+          <input type="date" id="filterDateTo" onchange="applyFilters()">
+        </div>
+      </div>
+      <div class="btn-group">
+        <button class="action-btn refresh-btn" onclick="loadReportData()">🔄  Обновить</button>
+        <button class="action-btn export-btn" onclick="exportToExcel()">📥 Скачать Excel</button>
+      </div>
     </div>
     
     <table>
       <thead>
         <tr>
+          <th>Дата</th>
           <th>Судно</th>
           <th>Документ</th>
           <th>Статус</th>
         </tr>
       </thead>
       <tbody id="reportTableBody">
-        <tr><td colspan="3">Нажмите «Обновить» для загрузки данных</td></tr>
+        <tr><td colspan="4">Нажмите «Обновить» для загрузки данных</td></tr>
       </tbody>
     </table>
   </div>
 
   <script>
-    // Внедряем автоматически URL бэкенда через шаблонизатор Apps Script
     const SCRIPT_URL = "<?= scriptUrl ?>";
     
     let base64PhotosArray = []; 
-    let reportDataCache = []; 
+    let rawReportData = []; // Исходные данные от сервера
+    let filteredReportData = []; // Отфильтрованные данные
 
-    // Инициализация Telegram WebApp
     const tg = window.Telegram ? window.Telegram.WebApp : null;
-    if (tg) {
-      tg.expand();
-    }
+    if (tg) tg.expand();
 
     document.addEventListener("DOMContentLoaded", function() {
       loadIntakeDocs();
@@ -135,7 +147,7 @@
       select.innerHTML = '<option value="">Загрузка...</option>';
 
       try {
-        const res = await fetch(`${SCRIPT_URL}?action=getDocs`);
+        const res = await fetch(`${SCRIPT_URL}?action=getDocs`, { redirect: 'follow' });
         const data = await res.json();
 
         select.innerHTML = '<option value="">-- Выберите документ --</option>';
@@ -156,7 +168,7 @@
       }
     }
 
-    // 2. Обработка множества выбранных фото
+    // 2. Предпросмотр фото
     function handleMultiplePhotos() {
       const files = document.getElementById('formPhotoFile').files;
       const container = document.getElementById('photosPreviewContainer');
@@ -180,17 +192,17 @@
       });
     }
 
-    // 3. Отправка формы приёмки на сервер
+    // 3. Сохранение формы
     async function handleFormSubmit(e) {
       e.preventDefault();
 
       const docSelect = document.getElementById('formDocSelect').value;
       if (!docSelect) {
-        alert("Пожалуйста, выберите номер документа!");
+        alert("Выберите номер документа!");
         return;
       }
 
-      const btn = document.getElementById('submitBtn');
+const btn = document.getElementById('submitBtn');
       btn.disabled = true;
       btn.innerText = "Сохранение...";
 
@@ -201,18 +213,17 @@
         box15: document.getElementById('formBox15').value,
         box25: document.getElementById('formBox25').value,
         comment: document.getElementById('formComment').value,
-
-photos: base64PhotosArray
+        photos: base64PhotosArray
       };
 
       try {
         await fetch(SCRIPT_URL, {
           method: "POST",
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          redirect: 'follow'
         });
         
         alert("Приёмка успешно сохранена!");
-        
         document.getElementById('intakeForm').reset();
         document.getElementById('photosPreviewContainer').innerHTML = "";
         base64PhotosArray = [];
@@ -226,41 +237,75 @@ photos: base64PhotosArray
       }
     }
 
-    // 4. Загрузка данных для отчета (ПРИНЯТО)
+    // 4. Загрузка данных для отчета
     async function loadReportData() {
       const tbody = document.getElementById('reportTableBody');
-      tbody.innerHTML = '<tr><td colspan="3">Загрузка данных...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4">Загрузка данных...</td></tr>';
 
       try {
-        const res = await fetch(`${SCRIPT_URL}?action=getReportData`);
+        const res = await fetch(`${SCRIPT_URL}?action=getReportData`, { redirect: 'follow' });
         const result = await res.json();
 
         if (result.data && result.data.length > 0) {
-          reportDataCache = result.data;
-          tbody.innerHTML = "";
-          result.data.forEach(row => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${row.vessel}</td><td>${row.docNum}</td><td>${row.status}</td>`;
-            tbody.appendChild(tr);
-          });
+          rawReportData = result.data;
+          applyFilters();
         } else {
-          reportDataCache = [];
-          tbody.innerHTML = '<tr><td colspan="3">Нет принятых документов</td></tr>';
+          rawReportData = [];
+          filteredReportData = [];
+          tbody.innerHTML = '<tr><td colspan="4">Нет принятых документов</td></tr>';
         }
       } catch (err) {
         console.error("Ошибка отчета:", err);
-        tbody.innerHTML = '<tr><td colspan="3">Ошибка загрузки отчета</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4">Ошибка загрузки отчета</td></tr>';
       }
     }
 
-    // 5. Экспорт в Excel
+    // 5. Фильтрация по диапазону дат на стороне клиента
+    function applyFilters() {
+      const dateFrom = document.getElementById('filterDateFrom').value;
+      const dateTo = document.getElementById('filterDateTo').value;
+
+      filteredReportData = rawReportData.filter(item => {
+        if (!item.date) return true;
+        if (dateFrom && item.date < dateFrom) return false;
+        if (dateTo && item.date > dateTo) return false;
+        return true;
+      });
+
+      renderReportTable(filteredReportData);
+    }
+
+    // 6. Отрисовка таблицы отчета
+    function renderReportTable(data) {
+      const tbody = document.getElementById('reportTableBody');
+      tbody.innerHTML = "";
+
+      if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4">За выбранный период данные не найдены</td></tr>';
+        return;
+      }
+
+      data.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${row.date || '—'}</td>
+          <td>${row.vessel}</td>
+          <td>${row.docNum}</td>
+          <td>${row.status}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // 7. Выгрузка в Excel с учётом выбранных дат
     function exportToExcel() {
-      if (!reportDataCache || reportDataCache.length === 0) {
+      if (!filteredReportData || filteredReportData.length === 0) {
         alert("Нет данных для выгрузки!");
         return;
       }
 
-      const excelRows = reportDataCache.map(item => ({
+      const excelRows = filteredReportData.map(item => ({
+        "Дата": item.date || "—",
         "Название судна": item.vessel,
         "Номер документа": item.docNum,
         "Статус": item.status
@@ -271,6 +316,7 @@ photos: base64PhotosArray
       XLSX.utils.book_append_sheet(workbook, worksheet, "Отчет");
 
       worksheet['!cols'] = [
+        { wch: 12 },
         { wch: 25 },
         { wch: 20 },
         { wch: 15 }
@@ -282,4 +328,3 @@ photos: base64PhotosArray
   </script>
 </body>
 </html>
-
