@@ -2,41 +2,35 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Приёмка и Отчетность</title>
+  
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <!-- Консоль отладки для Telegram WebView -->
   <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
   <script>eruda.init();</script>
+
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 12px; background: #f4f5f7; color: #333; }
-    
     .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
     .tab-btn { flex: 1; padding: 12px; border: none; background: #e0e0e0; font-weight: bold; border-radius: 8px; cursor: pointer; transition: 0.2s; }
     .tab-btn.active { background: #007bff; color: #fff; }
-    
     .content-block { display: none; background: #fff; padding: 16px; border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
     .content-block.active { display: block; }
-    
     label { font-weight: 600; display: block; margin-top: 10px; margin-bottom: 4px; font-size: 13px; }
     input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
-    
     .filter-card { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 12px; margin-bottom: 14px; }
     .filter-grid { display: flex; gap: 8px; }
     .filter-grid > div { flex: 1; }
-
     .btn-group { display: flex; gap: 8px; margin-top: 10px; }
     button.action-btn { flex: 1; padding: 10px; border: none; font-weight: bold; border-radius: 6px; cursor: pointer; }
     button.refresh-btn { background: #007bff; color: white; }
     button.export-btn { background: #28a745; color: white; }
     button.submit-btn { width: 100%; margin-top: 18px; padding: 12px; background: #007bff; color: white; border: none; font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer; }
     button:disabled { background: #a5a5a5; cursor: not-allowed; }
-    
     table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
     th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
     th { background-color: #f1f3f5; }
-
     .preview-container { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
     .preview-thumb { width: 65px; height: 65px; object-fit: cover; border-radius: 6px; border: 1px solid #ccc; }
   </style>
@@ -71,14 +65,12 @@
       <label for="formComment">Комментарий:</label>
       <textarea id="formComment" rows="2" placeholder="Дополнительная информация"></textarea>
 
-      <label for="formPhotoFile">Прикрепить фото (несколько файлов):</label>
+      <label for="formPhotoFile">Прикрепить фото:</label>
       <input type="file" id="formPhotoFile" accept="image/*" capture="environment" multiple onchange="handleMultiplePhotos()">
       
       <div id="photosPreviewContainer" class="preview-container"></div>
 
-
-
-<button type="submit" id="submitBtn" class="submit-btn">✅ Сохранить приёмку</button>
+      <button type="submit" id="submitBtn" class="submit-btn">✅ Сохранить приёмку</button>
     </form>
   </div>
 
@@ -96,7 +88,7 @@
         </div>
       </div>
       <div class="btn-group">
-        <button class="action-btn refresh-btn" onclick="loadReportData()">🔄  Обновить</button>
+        <button class="action-btn refresh-btn" onclick="loadReportData()">🔄 Обновить</button>
         <button class="action-btn export-btn" onclick="exportToExcel()">📥 Скачать Excel</button>
       </div>
     </div>
@@ -105,9 +97,9 @@
       <thead>
         <tr>
           <th>Дата</th>
-          <th>Судно</th>
           <th>Документ</th>
-          <th>Статус</th>
+          <th>Группа</th>
+          <th>Паллеты</th>
         </tr>
       </thead>
       <tbody id="reportTableBody">
@@ -117,7 +109,8 @@
   </div>
 
   <script>
-    const SCRIPT_URL = "<?= scriptUrl ?>";
+    // ⚠️ ВАЖНО: Вставьте сюда реальную URL из Web App Deployment (должна заканчиваться на /exec)
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw_GKMWf4NcaM6pyy-mJmTAIM4is1bG73vhBq8PeYytMvAQk70CLuSHXQqWQM-aMkQ/exec";
     
     let base64PhotosArray = []; 
     let rawReportData = []; 
@@ -131,14 +124,30 @@
     });
 
     async function apiPost(payload) {
-      const response = await fetch(SCRIPT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain;charset=utf-8"
-        },
-        body: JSON.stringify(payload)
-      });
-      return await response.json();
+      if (SCRIPT_URL.includes("ВАШ_SCRIPT_ID")) {
+        alert("Вставьте реальный SCRIPT_URL в index.html!");
+        throw new Error("Не указан SCRIPT_URL");
+      }
+
+      try {
+        const response = await fetch(SCRIPT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload)
+        });
+
+        const rawText = await response.text();
+
+        if (rawText.trim().startsWith("<")) {
+          console.error("Сервер Google вернул HTML:", rawText);
+          throw new Error("Отказ доступа Google. Проверьте права 'Anyone/Все' в развертывании!");
+        }
+
+        return JSON.parse(rawText);
+      } catch (err) {
+        console.error("Ошибка API:", err);
+        throw err;
+      }
     }
 
     function switchTab(tabName) {
@@ -156,14 +165,12 @@
       }
     }
 
-    // 1. Загрузка списка НЕ принятых документов
     async function loadIntakeDocs() {
       const select = document.getElementById('formDocSelect');
       select.innerHTML = '<option value="">Загрузка...</option>';
 
       try {
         const data = await apiPost({ action: "getDocs" });
-
         select.innerHTML = '<option value="">-- Выберите документ --</option>';
 
         if (data.docs && data.docs.length > 0) {
@@ -177,12 +184,10 @@
           select.innerHTML = '<option value="">Нет доступных документов</option>';
         }
       } catch (err) {
-        console.error("Ошибка загрузки документов:", err);
         select.innerHTML = '<option value="">Ошибка загрузки списка</option>';
       }
     }
 
-    // 2. Предпросмотр фото
     function handleMultiplePhotos() {
       const files = document.getElementById('formPhotoFile').files;
       const container = document.getElementById('photosPreviewContainer');
@@ -194,28 +199,20 @@
       Array.from(files).forEach(file => {
         const reader = new FileReader();
         reader.onload = function(e) {
-          const base64Data = e.target.result;
-          base64PhotosArray.push(base64Data);
-
+          base64PhotosArray.push(e.target.result);
           const img = document.createElement('img');
-          img.src = base64Data;
+          img.src = e.target.result;
           img.className = 'preview-thumb';
-
-container.appendChild(img);
+          container.appendChild(img);
         };
         reader.readAsDataURL(file);
       });
     }
 
-    // 3. Сохранение формы
     async function handleFormSubmit(e) {
       e.preventDefault();
-
       const docSelect = document.getElementById('formDocSelect').value;
-      if (!docSelect) {
-        alert("Выберите номер документа!");
-        return;
-      }
+      if (!docSelect) return alert("Выберите документ!");
 
       const btn = document.getElementById('submitBtn');
       btn.disabled = true;
@@ -244,21 +241,19 @@ container.appendChild(img);
           alert("Ошибка: " + res.message);
         }
       } catch (err) {
-        alert("Ошибка сети при сохранении: " + err);
+        alert("Ошибка сети: " + err);
       } finally {
         btn.disabled = false;
         btn.innerText = "✅ Сохранить приёмку";
       }
     }
 
-    // 4. Загрузка данных для отчета
     async function loadReportData() {
       const tbody = document.getElementById('reportTableBody');
       tbody.innerHTML = '<tr><td colspan="4">Загрузка данных...</td></tr>';
 
       try {
         const result = await apiPost({ action: "getReportData" });
-
         if (result.data && result.data.length > 0) {
           rawReportData = result.data;
           applyFilters();
@@ -268,12 +263,10 @@ container.appendChild(img);
           tbody.innerHTML = '<tr><td colspan="4">Нет принятых документов</td></tr>';
         }
       } catch (err) {
-        console.error("Ошибка отчета:", err);
         tbody.innerHTML = '<tr><td colspan="4">Ошибка загрузки отчета</td></tr>';
       }
     }
 
-    // 5. Фильтрация
     function applyFilters() {
       const dateFrom = document.getElementById('filterDateFrom').value;
       const dateTo = document.getElementById('filterDateTo').value;
@@ -288,7 +281,6 @@ container.appendChild(img);
       renderReportTable(filteredReportData);
     }
 
-    // 6. Отрисовка таблицы
     function renderReportTable(data) {
       const tbody = document.getElementById('reportTableBody');
       tbody.innerHTML = "";
@@ -302,43 +294,32 @@ container.appendChild(img);
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${row.date || '—'}</td>
-          <td>${row.vessel}</td>
           <td>${row.docNum}</td>
-          <td>${row.status}</td>
+          <td>${row.group || '—'}</td>
+          <td>${row.pallets || 0}</td>
         `;
         tbody.appendChild(tr);
       });
     }
 
-    // 7. Экспорт в Excel
     function exportToExcel() {
       if (!filteredReportData || filteredReportData.length === 0) {
-        alert("Нет данных для выгрузки!");
-        return;
+        return alert("Нет данных для выгрузки!");
       }
 
       const excelRows = filteredReportData.map(item => ({
         "Дата": item.date || "—",
-        "Название судна": item.vessel,
         "Номер документа": item.docNum,
-        "Статус": item.status
+        "Группа": item.group || "—",
+        "Паллеты": item.pallets || 0
       }));
 
       const worksheet = XLSX.utils.json_to_sheet(excelRows);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Отчет");
-
-      worksheet['!cols'] = [
-        { wch: 12 },
-
-{ wch: 25 },
-        { wch: 20 },
-        { wch: 15 }
-      ];
-
-      const fileName = `Report_Accepted_${new Date().toISOString().slice(0, 10)}.xlsx`;
-      XLSX.writeFile(workbook, fileName);
+      XLSX.writeFile(workbook, `Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
     }
   </script>
 </body>
 </html>
+
