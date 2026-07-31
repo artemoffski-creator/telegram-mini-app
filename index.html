@@ -124,23 +124,37 @@
     });
 
 async function apiPost(payload) {
+  if (SCRIPT_URL.includes("ВАШ_SCRIPT_ID")) {
+    alert("Укажите реальный SCRIPT_URL!");
+    throw new Error("Не указан SCRIPT_URL");
+  }
+
   try {
+    // Используем redirect: "follow", чтобы fetch прозрачно проходил 302 редирект Google
     const response = await fetch(SCRIPT_URL, {
       method: "POST",
-      // ВАЖНО: Только text/plain! Не используйте application/json и НЕ добавляйте mode: 'no-cors'
-      headers: { 
-        "Content-Type": "text/plain;charset=utf-8" 
+      mode: "cors",
+      redirect: "follow",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
       },
       body: JSON.stringify(payload)
     });
 
     const rawText = await response.text();
-    return JSON.parse(rawText);
+    
+    try {
+      return JSON.parse(rawText);
+    } catch (e) {
+      console.error("Ошибка парсинга ответа:", rawText);
+      throw new Error("Сервер вернул не JSON: " + rawText.substring(0, 100));
+    }
   } catch (err) {
-    console.error("Детали ошибки:", err);
+    console.error("Сетевая ошибка:", err);
     throw err;
   }
 }
+
 
 
     function switchTab(tabName) {
