@@ -123,32 +123,25 @@
       loadIntakeDocs();
     });
 
-    async function apiPost(payload) {
-      if (SCRIPT_URL.includes("ВАШ_SCRIPT_ID")) {
-        alert("Вставьте реальный SCRIPT_URL в index.html!");
-        throw new Error("Не указан SCRIPT_URL");
-      }
+async function apiPost(payload) {
+  try {
+    const response = await fetch(SCRIPT_URL, {
+      method: "POST",
+      // ВАЖНО: Только text/plain! Не используйте application/json и НЕ добавляйте mode: 'no-cors'
+      headers: { 
+        "Content-Type": "text/plain;charset=utf-8" 
+      },
+      body: JSON.stringify(payload)
+    });
 
-      try {
-        const response = await fetch(SCRIPT_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify(payload)
-        });
+    const rawText = await response.text();
+    return JSON.parse(rawText);
+  } catch (err) {
+    console.error("Детали ошибки:", err);
+    throw err;
+  }
+}
 
-        const rawText = await response.text();
-
-        if (rawText.trim().startsWith("<")) {
-          console.error("Сервер Google вернул HTML:", rawText);
-          throw new Error("Отказ доступа Google. Проверьте права 'Anyone/Все' в развертывании!");
-        }
-
-        return JSON.parse(rawText);
-      } catch (err) {
-        console.error("Ошибка API:", err);
-        throw err;
-      }
-    }
 
     function switchTab(tabName) {
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
