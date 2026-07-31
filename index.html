@@ -3,302 +3,185 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TMA Cargo System</title>
-  
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <title>Приёмка и Отчетность</title>
+  <!-- Библиотека SheetJS для генерации и скачивания Excel-файлов -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
   <style>
     * { box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f4f7; margin: 0; padding: 12px; color: #333; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 12px; background: #f4f5f7; color: #333; }
     
-    .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
-    .tab-btn { flex: 1; padding: 10px; background: #e3e3e8; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; color: #555; }
-    .tab-btn.active { background: #007aff; color: #fff; }
-
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
-
-    .controls { background: #fff; padding: 14px; border-radius: 12px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-    .btn-group { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 8px; }
-    .btn-group button { border: 1px solid #007aff; background: #fff; color: #007aff; padding: 6px 12px; border-radius: 8px; font-size: 13px; white-space: nowrap; cursor: pointer; }
-    .btn-group button.active { background: #007aff; color: #fff; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tab-btn { flex: 1; padding: 12px; border: none; background: #e0e0e0; font-weight: bold; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+    .tab-btn.active { background: #007bff; color: #fff; }
     
-    .select-row { display: flex; gap: 8px; margin-bottom: 8px; }
-    select, input, textarea { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; font-size: 14px; background: #fff; margin-bottom: 10px; }
+    .content-block { display: none; background: #fff; padding: 16px; border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+    .content-block.active { display: block; }
     
-    .excel-btn { width: 100%; background: #34c759; color: #fff; border: none; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 14px; cursor: pointer; }
-    .submit-btn { width: 100%; background: #007aff; color: #fff; border: none; padding: 12px; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; }
-    .submit-btn:disabled { background: #ccc; }
+    label { font-weight: 600; display: block; margin-top: 12px; margin-bottom: 4px; font-size: 14px; }
+    input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+    
+    .btn-group { display: flex; gap: 8px; margin-bottom: 12px; }
+    button.action-btn { padding: 10px 14px; border: none; font-weight: bold; border-radius: 6px; cursor: pointer; }
+    button.refresh-btn { background: #6c757d; color: white; }
+    button.export-btn { background: #28a745; color: white; }
+    button.submit-btn { width: 100%; margin-top: 18px; padding: 12px; background: #007bff; color: white; border: none; font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer; }
+    button:disabled { background: #a5a5a5; cursor: not-allowed; }
+    
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+    th, td { border: 1px solid #ddd; padding: 10px 8px; text-align: left; }
+    th { background-color: #f1f3f5; }
 
-    .card { background: #fff; border-radius: 10px; padding: 12px; margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
-    .card-header { display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; margin-bottom: 6px; border-bottom: 1px solid #f0f0f0; padding-bottom: 6px; }
-    .badge { background: #e5f1ff; color: #007aff; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
-    .card-body { font-size: 13px; color: #444; line-height: 1.5; }
-    .loader { text-align: center; padding: 20px; color: #777; font-size: 14px; }
-    label { font-size: 12px; font-weight: bold; color: #555; display: block; margin-bottom: 4px; }
-
-    #photoPreview { width: 100%; max-height: 180px; object-fit: cover; border-radius: 8px; margin-bottom: 10px; display: none; }
+    /* Превью сетки выбранных фотографий */
+    .preview-container { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .preview-thumb { width: 70px; height: 70px; object-fit: cover; border-radius: 6px; border: 1px solid #ccc; }
   </style>
 </head>
 <body>
 
   <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('report')">📋 Отчёт</button>
-    <button class="tab-btn" onclick="switchTab('intake')">📦 Приёмка</button>
+    <button class="tab-btn active" onclick="switchTab('intake')">Приёмка</button>
+    <button class="tab-btn" onclick="switchTab('report')">Отчёт</button>
   </div>
 
-  <!-- ВКЛАДКА 1: ОТЧЕТ -->
-  <div id="tab-report" class="tab-content active">
-    <div class="controls">
-      <div class="btn-group">
-        <button onclick="setPeriod('all', this)" class="active">Все</button>
-        <button onclick="setPeriod('current_week', this)">Тек. неделя</button>
-        <button onclick="setPeriod('last_week', this)">Прошлая неделя</button>
-        <button onclick="setPeriod('month', this)">Месяц</button>
-      </div>
+  <!-- ВКТАДКА: ПРИЁМКА -->
+  <div id="tab-intake" class="content-block active">
+    <form id="intakeForm" onsubmit="handleFormSubmit(event)">
+      <label for="formDocSelect">Номер документа (НЕ принятые):</label>
+      <select id="formDocSelect" required>
+        <option value="">Загрузка списка...</option>
+      </select>
 
-      <div class="select-row" id="monthContainer" style="display:none;">
-        <select id="monthSelect" onchange="loadData()"></select>
-      </div>
+      <label for="formGroup">Маркировка / Группа:</label>
+      <input type="text" id="formGroup" placeholder="Введите маркировку">
 
-      <div class="select-row">
-        <select id="vesselSelect" onchange="renderData()">
-          <option value="">Все суда</option>
-        </select>
-      </div>
+      <label for="formPallets">Паллеты:</label>
+      <input type="number" id="formPallets" value="0" min="0">
 
-      <button class="excel-btn" onclick="exportToExcel()">📊 Скачать в Excel (.xlsx)</button>
-    </div>
+      <label for="formBox15">Коробки 15 кг:</label>
+      <input type="number" id="formBox15" value="0" min="0">
 
-    <div id="dataList" class="loader">Загрузка данных...</div>
+      <label for="formBox25">Коробки 25 кг:</label>
+      <input type="number" id="formBox25" value="0" min="0">
+
+      <label for="formComment">Комментарий:</label>
+      <textarea id="formComment" rows="2" placeholder="Дополнительная информация"></textarea>
+
+      <label for="formPhotoFile">Прикрепить фото (можно выбрать несколько):</label>
+      <input type="file" id="formPhotoFile" accept="image/*" capture="environment" multiple onchange="handleMultiplePhotos()">
+      
+      <!-- Галерея предпросмотра выбранных файлов -->
+      <div id="photosPreviewContainer" class="preview-container"></div>
+
+      <button type="submit" id="submitBtn" class="submit-btn">✅ Сохранить приёмку</button>
+    </form>
   </div>
 
-  <!-- ВКЛАДКА 2: ФОРМА ПРИЁМКИ -->
-  <div id="tab-intake" class="tab-content">
-    <div class="controls">
-      <form id="intakeForm" onsubmit="handleFormSubmit(event)">
-        
-        <label>Выберите номер документа (из Реестра):</label>
-        <select id="formDocSelect" required>
-          <option value="">Загрузка документов из Реестра...</option>
-        </select>
+  <!-- ВКЛАДКА: ОТЧЕТ -->
+  <div id="tab-report" class="content-block">
+    <div class="btn-group">
 
-        <label>Маркировка / Группа:</label>
-        <input type="text" id="formGroup" placeholder="Например: CELST-123">
 
-        <label>Паллеты (шт):</label>
-        <input type="number" id="formPallets" value="0" min="0" step="any">
 
-        <label>Коробки 15кг (шт):</label>
-        <input type="number" id="formBox15" value="0" min="0" step="any">
-
-        <label>Коробки 25кг (шт):</label>
-        <input type="number" id="formBox25" value="0" min="0" step="any">
-
-        <label>Сделать / прикрепить фото:</label>
-        <input type="file" id="formPhotoFile" accept="image/*" capture="environment" onchange="previewFile()">
-        <img id="photoPreview" alt="Превью фото">
-
-        <label>Комментарий:</label>
-        <textarea id="formComment" rows="2" placeholder="Примечание по грузу..."></textarea>
-
-        <button type="submit" id="submitBtn" class="submit-btn">✅ Сохранить приёмку</button>
-      </form>
+<button class="action-btn refresh-btn" onclick="loadReportData()">🔄  Обновить</button>
+      <button class="action-btn export-btn" onclick="exportToExcel()">📥 Скачать Excel</button>
     </div>
+    
+    <table>
+      <thead>
+        <tr>
+          <th>Судно</th>
+          <th>Документ</th>
+          <th>Статус</th>
+        </tr>
+      </thead>
+      <tbody id="reportTableBody">
+        <tr><td colspan="3">Нажмите «Обновить» для загрузки данных</td></tr>
+      </tbody>
+    </table>
   </div>
 
   <script>
-    const tg = window.Telegram.WebApp;
-    tg.expand();
+    const SCRIPT_URL = window.location.href.split('?')[0]; 
+    let base64PhotosArray = []; 
+    let reportDataCache = []; 
 
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw_GKMWf4NcaM6pyy-mJmTAIM4is1bG73vhBq8PeYytMvAQk70CLuSHXQqWQM-aMkQ/exec"; 
+    document.addEventListener("DOMContentLoaded", function() {
+      loadIntakeDocs();
+    });
 
-    let currentPeriod = 'all';
-    let rawItems = [];
-    let vesselsList = [];
-    let docsList = [];
-    let base64Photo = "";
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.content-block').forEach(blk => blk.classList.remove('active'));
 
-    function initMonths() {
-      const select = document.getElementById('monthSelect');
-      select.innerHTML = '';
-      const now = new Date();
-      for (let i = 0; i < 12; i++) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-        const name = d.toLocaleString('ru', { month: 'long', year: 'numeric' });
-        select.innerHTML += `<option value="${val}">${name}</option>`;
-      }
-    }
-
-    function switchTab(tab) {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-      
-      if (tab === 'report') {
+      if (tabName === 'intake') {
         document.querySelectorAll('.tab-btn')[0].classList.add('active');
-        document.getElementById('tab-report').classList.add('active');
+        document.getElementById('tab-intake').classList.add('active');
+        loadIntakeDocs();
       } else {
         document.querySelectorAll('.tab-btn')[1].classList.add('active');
-        document.getElementById('tab-intake').classList.add('active');
+        document.getElementById('tab-report').classList.add('active');
+        loadReportData();
       }
     }
 
-    function setPeriod(p, btn) {
-      currentPeriod = p;
-      document.querySelectorAll('.btn-group button').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      
-      document.getElementById('monthContainer').style.display = (p === 'month') ? 'flex' : 'none';
-      loadData();
-    }
-
-    function previewFile() {
-      const file = document.getElementById('formPhotoFile').files[0];
-      const preview = document.getElementById('photoPreview');
-      const reader = new FileReader();
-
-      reader.addEventListener("load", function () {
-        preview.src = reader.result;
-        preview.style.display = "block";
-        base64Photo = reader.result;
-      }, false);
-
-      if (file) reader.readAsDataURL(file);
-    }
-
-    async function loadData() {
-      document.getElementById('dataList').innerHTML = "Загрузка данных...";
-      let url = `${SCRIPT_URL}?period=${currentPeriod}`;
-      if (currentPeriod === 'month') {
-        url += `&month=${document.getElementById('monthSelect').value}`;
-      }
+    // 1. Получение только НЕ принятых документов для списка
+    async function loadIntakeDocs() {
+      const select = document.getElementById('formDocSelect');
+      select.innerHTML = '<option value="">Загрузка...</option>';
 
       try {
-        const res = await fetch(url);
+        const res = await fetch(`${SCRIPT_URL}?action=getDocs`);
         const data = await res.json();
-        
-        if (data.error) {
-          document.getElementById('dataList').innerHTML = `<div class='loader'>Ошибка: ${data.error}</div>`;
-          return;
+
+        select.innerHTML = '<option value="">-- Выберите документ --</option>';
+
+        if (data.docs && data.docs.length > 0) {
+          data.docs.forEach(doc => {
+            const opt = document.createElement('option');
+            opt.value = doc;
+            opt.textContent = doc;
+            select.appendChild(opt);
+          });
+        } else {
+          select.innerHTML = '<option value="">Нет доступных документов</option>';
         }
-
-        rawItems = data.items || [];
-        vesselsList = data.vessels || [];
-        docsList = data.docs || [];
-
-        updateVesselsDropdown();
-        updateDocsDropdown();
-        renderData();
-      } catch (e) {
-        document.getElementById('dataList').innerHTML = "<div class='loader'>Ошибка загрузки. Проверьте SCRIPT_URL</div>";
+      } catch (err) {
+        console.error("Ошибка загрузки выпадающего списка:", err);
+        select.innerHTML = '<option value="">Ошибка загрузки списка</option>';
       }
     }
 
-    function updateVesselsDropdown() {
-      const select = document.getElementById('vesselSelect');
-      const selected = select.value;
-      select.innerHTML = '<option value="">Все суда</option>';
-      vesselsList.forEach(v => {
-        select.innerHTML += `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`;
+    // 2. Генерация превью и конвертация в Base64 для пакетной загрузки фото
+    function handleMultiplePhotos() {
+      const files = document.getElementById('formPhotoFile').files;
+      const container = document.getElementById('photosPreviewContainer');
+      container.innerHTML = '';
+      base64PhotosArray = [];
+
+      if (!files || files.length === 0) return;
+
+      Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const base64Data = e.target.result;
+          base64PhotosArray.push(base64Data);
+
+          const img = document.createElement('img');
+          img.src = base64Data;
+          img.className = 'preview-thumb';
+          container.appendChild(img);
+        };
+        reader.readAsDataURL(file);
       });
     }
 
-    function updateDocsDropdown() {
-      const select = document.getElementById('formDocSelect');
-      select.innerHTML = '<option value="">-- Выберите документ из Реестра --</option>';
-      if (docsList.length === 0) {
-        select.innerHTML = '<option value="">Документы в Реестре не найдены</option>';
-        return;
-      }
-      docsList.forEach(d => {
-        select.innerHTML += `<option value="${d}">${d}</option>`;
-      });
-    }
-
-    function renderData() {
-      const selectedVessel = document.getElementById('vesselSelect').value;
-      const filtered = rawItems.filter(item => !selectedVessel || item.vessel === selectedVessel);
-
-      if (filtered.length === 0) {
-        document.getElementById('dataList').innerHTML = "<div class='loader'>Записей не найдено</div>";
-        return;
-      }
-
-      let html = '';
-      filtered.forEach(item => {
-        html += `
-          <div class="card">
-            <div class="card-header">
-              <span>🚢 ${item.vessel}</span>
-              <span class="badge">${item.status}</span>
-            </div>
-            <div class="card-body">
-              <b>Документ:</b> ${item.doc}<br>
-              <b>Дата:</b> ${item.date}<br>
-              <b>Паллеты:</b> ${item.pallets} | <b>15кг:</b> ${item.box15} | <b>25кг:</b> ${item.box25}<br>
-              ${item.comment ? `<b>Коммент:</b> ${item.comment}<br>` : ''}
-              ${item.photo ? `<a href="${item.photo}" target="_blank" style="color:#007aff;">📷 Фото</a>` : ''}
-            </div>
-          </div>
-        `;
-      });
-      document.getElementById('dataList').innerHTML = html;
-    }
-
-    function exportToExcel() {
-  const selectedVessel = document.getElementById('vesselSelect').value;
-  const filtered = rawItems.filter(item => !selectedVessel || item.vessel === selectedVessel);
-
-  if (filtered.length === 0) {
-    alert("Нет данных для экспорта!");
-    return;
-  }
-
-  const excelData = filtered.map(i => ({
-    "Судно": i.vessel,
-    "Документ": i.doc,
-    "Маркировка": i.group,
-    "Статус": i.status,
-    "Дата приёмки": i.date,
-    "Паллеты": i.pallets,
-    "Коробки 15кг": i.box15,
-    "Коробки 25кг": i.box25,
-    "Комментарий": i.comment,
-    "Ссылка на фото": i.photo
-  }));
-
-  const worksheet = XLSX.utils.json_to_sheet(excelData);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Приёмка");
-
-  // Генерируем имя файла
-  const fileName = `Отчет_Приемка_${new Date().toISOString().slice(0,10)}.xlsx`;
-
-  try {
-    // 1. Попытка стандартного скачивания (работает на ПК и в обычных браузерах)
-    XLSX.writeFile(workbook, fileName);
-  } catch (err) {
-    // 2. Фолбэк для мобильного Telegram WebApp, если прямая запись заблокирована
-    const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
-    const dataUri = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + wbout;
-    
-    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openLink) {
-      window.Telegram.WebApp.openLink(dataUri);
-    } else {
-      window.location.href = dataUri;
-    }
-  }
-}
-
-
+    // 3. Отправка формы на сервер Apps Script
     async function handleFormSubmit(e) {
       e.preventDefault();
-      
+
       const docSelect = document.getElementById('formDocSelect').value;
       if (!docSelect) {
-        alert("Выберите номер документа!");
+        alert("Пожалуйста, выберите номер документа!");
         return;
       }
 
@@ -313,29 +196,85 @@
         box15: document.getElementById('formBox15').value,
         box25: document.getElementById('formBox25').value,
         comment: document.getElementById('formComment').value,
-        photoBase64: base64Photo
+        photos: base64PhotosArray
       };
 
       try {
-        await fetch(SCRIPT_URL, { method: "POST", body: JSON.stringify(payload) });
+
+await fetch(SCRIPT_URL, {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+        
         alert("Приёмка успешно сохранена!");
+        
+        // Очистка формы и сброс массива файлов
         document.getElementById('intakeForm').reset();
-        document.getElementById('photoPreview').style.display = "none";
-        base64Photo = "";
+        document.getElementById('photosPreviewContainer').innerHTML = "";
+        base64PhotosArray = [];
         
         switchTab('report');
-        loadData();
       } catch (err) {
-        alert("Ошибка при сохранении!");
+        alert("Ошибка при сохранении данных: " + err);
       } finally {
         btn.disabled = false;
         btn.innerText = "✅ Сохранить приёмку";
       }
     }
 
-    initMonths();
-    loadData();
+    // 4. Загрузка списка "ПРИНЯТО" для вкладки Отчёта
+    async function loadReportData() {
+      const tbody = document.getElementById('reportTableBody');
+      tbody.innerHTML = '<tr><td colspan="3">Загрузка данных...</td></tr>';
+
+      try {
+        const res = await fetch(`${SCRIPT_URL}?action=getReportData`);
+        const result = await res.json();
+
+        if (result.data && result.data.length > 0) {
+          reportDataCache = result.data;
+          tbody.innerHTML = "";
+          result.data.forEach(row => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${row.vessel}</td><td>${row.docNum}</td><td>${row.status}</td>`;
+            tbody.appendChild(tr);
+          });
+        } else {
+          reportDataCache = [];
+          tbody.innerHTML = '<tr><td colspan="3">Нет принятых документов</td></tr>';
+        }
+      } catch (err) {
+        console.error("Ошибка загрузки таблицы отчета:", err);
+        tbody.innerHTML = '<tr><td colspan="3">Ошибка загрузки отчета</td></tr>';
+      }
+    }
+
+    // 5. Выгрузка в файл Excel (.xlsx) через SheetJS
+    function exportToExcel() {
+      if (!reportDataCache || reportDataCache.length === 0) {
+        alert("Нет данных для выгрузки!");
+        return;
+      }
+
+      const excelRows = reportDataCache.map(item => ({
+        "Название судна": item.vessel,
+        "Номер документа": item.docNum,
+        "Статус": item.status
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(excelRows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Отчет");
+
+      worksheet['!cols'] = [
+        { wch: 25 },
+        { wch: 20 },
+        { wch: 15 }
+      ];
+
+      const fileName = `Report_Accepted_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+    }
   </script>
 </body>
 </html>
-
